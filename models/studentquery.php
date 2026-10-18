@@ -29,6 +29,97 @@ class Student
         return $stmt->get_result()->fetch_assoc();
     }
 
+    public function addStudentBasic($studentNumber, $firstName, $middleName, $lastName)
+    {
+        $stmt = $this->conn->prepare(
+            "INSERT INTO information
+                (Student_Number, First_Name, Middle_Name, Last_Name, Course, School_Year, Email, Active)
+             VALUES (?, ?, ?, ?, '', '', '', 0)"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("ssss", $studentNumber, $firstName, $middleName, $lastName);
+        $success = $stmt->execute();
+        $studentId = $success ? $stmt->insert_id : false;
+        $stmt->close();
+
+        return $studentId;
+    }
+
+    public function updateStudentCategory($id, $category, array $fields)
+    {
+        $categoryColumns = [
+            'personal' => [
+                'Student_Number' => 'Student_Number',
+                'First_Name' => 'First_Name',
+                'Middle_Name' => 'Middle_Name',
+                'Last_Name' => 'Last_Name',
+                'Date_Of_Birth' => 'Date_Of_Birth',
+                'Gender' => 'Gender',
+                'Civil_Status' => 'Civil_Status',
+                'House_Unit_No' => 'House_Unit_No',
+                'Street' => 'Street',
+                'Barangay' => 'Barangay',
+                'City_Municipality' => 'City_Municipality',
+                'Province' => 'Province',
+                'Contact_Number' => 'Contact_Number',
+                'Email' => 'Email',
+                'Nationality' => 'Nationality',
+            ],
+            'academic' => [
+                'Course' => 'Course',
+                'Year_Level' => 'Year_Level',
+                'School_Year' => 'School_Year',
+                'Department' => 'Department',
+                'Current_GPA' => 'Current_GPA',
+            ],
+            'emergency' => [
+                'Emergency_First_Name' => 'Emergency_First_Name',
+                'Emergency_Middle_Name' => 'Emergency_Middle_Name',
+                'Emergency_Last_Name' => 'Emergency_Last_Name',
+                'Emergency_Contact_Number' => 'Emergency_Contact_Number',
+                'Emergency_House_Unit_No' => 'Emergency_House_Unit_No',
+                'Emergency_Street' => 'Emergency_Street',
+                'Emergency_Barangay' => 'Emergency_Barangay',
+                'Emergency_City_Municipality' => 'Emergency_City_Municipality',
+                'Emergency_Province' => 'Emergency_Province',
+                'Emergency_Email' => 'Emergency_Email',
+            ],
+        ];
+
+        if (!isset($categoryColumns[$category]) || $fields === []) {
+            return false;
+        }
+
+        $setParts = [];
+        $values = [];
+        foreach ($categoryColumns[$category] as $field => $column) {
+            if (array_key_exists($field, $fields)) {
+                $setParts[] = "`$column` = ?";
+                $values[] = $fields[$field];
+            }
+        }
+
+        if ($setParts === []) {
+            return false;
+        }
+
+        $values[] = $id;
+        $sql = "UPDATE information SET " . implode(', ', $setParts) . " WHERE ID = ? AND Active = 0";
+        $stmt = $this->conn->prepare($sql);
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param(str_repeat('s', count($values) - 1) . 'i', ...$values);
+        $success = $stmt->execute();
+        $stmt->close();
+
+        return $success;
+    }
+
     // Add student
     public function addStudent(
         $student_no,
@@ -62,6 +153,8 @@ class Student
         $emergencyProvince,
         $emergencyEmail
     ) {
+        $dateOfBirth = $dateOfBirth !== '' ? $dateOfBirth : null;
+
         $sql = "INSERT INTO information
                 (
                     Student_Number,
@@ -98,7 +191,7 @@ class Student
                 )
                 VALUES
                 (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0
                 )";
 
         $stmt = $this->conn->prepare($sql);
@@ -139,8 +232,11 @@ class Student
             $emergencyEmail,
         ];
         $stmt->bind_param(str_repeat('s', count($values)), ...$values);
+        $success = $stmt->execute();
+        $studentId = $success ? $stmt->insert_id : false;
+        $stmt->close();
 
-        return $stmt->execute();
+        return $studentId;
     }
 
     // Update student

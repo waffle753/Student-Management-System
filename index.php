@@ -31,93 +31,88 @@ if ($programs) {
     }
 }
 
-$validCourseOptions = array_fill_keys(array_column($courseOptions, 'name'), true);
-
 $page = $_GET['page'] ?? 'students';
 
-// Handle Add Student
-if (isset($_POST['save'])) {
+if (isset($_POST['create_student'])) {
+    $studentNumber = trim($_POST['student_no'] ?? '');
+    $firstName = trim($_POST['fname'] ?? '');
+    $middleName = trim($_POST['mname'] ?? '');
+    $lastName = trim($_POST['lname'] ?? '');
+    $namePattern = "/^[A-Za-zÀ-ÖØ-öø-ÿ\\s'.-]+$/u";
 
-    $student_no = trim($_POST['student_no']);
-    $fname = trim($_POST['fname']);
-    $mname = trim($_POST['mname']);
-    $lname = trim($_POST['lname']);
-    $dateOfBirth = trim($_POST['date_of_birth'] ?? '');
-    $gender = trim($_POST['gender'] ?? '');
-    $civilStatus = trim($_POST['civil_status'] ?? '');
-    $houseUnitNo = trim($_POST['house_unit_no'] ?? '');
-    $street = trim($_POST['street'] ?? '');
-    $barangay = trim($_POST['barangay'] ?? '');
-    $cityMunicipality = trim($_POST['city_municipality'] ?? '');
-    $province = trim($_POST['province'] ?? '');
-    $contactNumber = trim($_POST['contact_number'] ?? '');
-    $email = trim($_POST['email']);
-    $nationality = trim($_POST['nationality'] ?? '');
-    $course = trim($_POST['course']);
-    $yearLevel = trim($_POST['year_level'] ?? '');
-    $school_year = trim($_POST['school_year']);
-    $department = trim($_POST['department'] ?? '');
-    $currentGpa = trim($_POST['current_gpa'] ?? '');
-    $emergencyFirstName = trim($_POST['emergency_first_name'] ?? '');
-    $emergencyMiddleName = trim($_POST['emergency_middle_name'] ?? '');
-    $emergencyLastName = trim($_POST['emergency_last_name'] ?? '');
-    $emergencyContactNumber = trim($_POST['emergency_contact_number'] ?? '');
-    $emergencyHouseUnitNo = trim($_POST['emergency_house_unit_no'] ?? '');
-    $emergencyStreet = trim($_POST['emergency_street'] ?? '');
-    $emergencyBarangay = trim($_POST['emergency_barangay'] ?? '');
-    $emergencyCityMunicipality = trim($_POST['emergency_city_municipality'] ?? '');
-    $emergencyProvince = trim($_POST['emergency_province'] ?? '');
-    $emergencyEmail = trim($_POST['emergency_email'] ?? '');
+    if (!isValidCsrfToken($_POST['csrf_token'] ?? null)) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
 
     if (
-        !empty($fname) &&
-        !empty($lname) &&
-        !empty($course) &&
-        !empty($school_year) &&
-        !empty($email) &&
-        isset($validCourseOptions[$course])
+        !preg_match('/^[0-9]{10}$/', $studentNumber) ||
+        !preg_match($namePattern, $firstName) ||
+        ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
+        !preg_match($namePattern, $lastName)
     ) {
-        if ($student->studentExists($student_no)) {
-            header("Location: index.php?duplicate=1");
-            exit;
-        }
-
-        if ($student->addStudent(
-            $student_no,
-            $fname,
-            $mname,
-            $lname,
-            $course,
-            $school_year,
-            $email,
-            $dateOfBirth,
-            $gender,
-            $civilStatus,
-            $houseUnitNo,
-            $street,
-            $barangay,
-            $cityMunicipality,
-            $province,
-            $contactNumber,
-            $nationality,
-            $yearLevel,
-            $department,
-            $currentGpa,
-            $emergencyFirstName,
-            $emergencyMiddleName,
-            $emergencyLastName,
-            $emergencyContactNumber,
-            $emergencyHouseUnitNo,
-            $emergencyStreet,
-            $emergencyBarangay,
-            $emergencyCityMunicipality,
-            $emergencyProvince,
-            $emergencyEmail
-        )) {
-            header("Location: index.php?success=1");
-            exit;
-        }
+        header("Location: index.php?invalid=1");
+        exit;
     }
+
+    if ($student->studentExists($studentNumber)) {
+        header("Location: index.php?duplicate=1");
+        exit;
+    }
+
+    $field = static function ($name) {
+        $value = $_POST[$name] ?? '';
+        return is_string($value) ? trim($value) : '';
+    };
+    $email = $field('email');
+    $emergencyEmail = $field('emergency_email');
+    if (
+        ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) ||
+        ($emergencyEmail !== '' && !filter_var($emergencyEmail, FILTER_VALIDATE_EMAIL))
+    ) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
+
+    $createdStudentId = $student->addStudent(
+        $studentNumber,
+        $firstName,
+        $middleName,
+        $lastName,
+        $field('course'),
+        $field('school_year'),
+        $email,
+        $field('date_of_birth'),
+        $field('gender'),
+        $field('civil_status'),
+        $field('house_unit_no'),
+        $field('street'),
+        $field('barangay'),
+        $field('city_municipality'),
+        $field('province'),
+        $field('contact_number'),
+        $field('nationality'),
+        $field('year_level'),
+        $field('department'),
+        $field('current_gpa'),
+        $field('emergency_first_name'),
+        $field('emergency_middle_name'),
+        $field('emergency_last_name'),
+        $field('emergency_contact_number'),
+        $field('emergency_house_unit_no'),
+        $field('emergency_street'),
+        $field('emergency_barangay'),
+        $field('emergency_city_municipality'),
+        $field('emergency_province'),
+        $emergencyEmail
+    );
+    if ($createdStudentId !== false) {
+        header("Location: index.php?success=1&manage_id=" . (int) $createdStudentId);
+        exit;
+    }
+
+    header("Location: index.php?save_error=1");
+    exit;
 }
 
 $result = $student->getAllStudents();
@@ -209,6 +204,43 @@ $result = $student->getAllStudents();
     .row>[class*="col-"] {
         padding-left: 12px;
         padding-right: 12px;
+    }
+
+    .student-form-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid #dfe7f1;
+    }
+
+    .student-form-tab {
+        border: 1px solid #cfe2ff;
+        background: #edf5ff;
+        color: #0b5ed7;
+        padding: 0.7rem 1.1rem;
+        border-radius: 10px;
+        font-weight: 700;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .student-form-tab:hover,
+    .student-form-tab.active {
+        background: #0d6efd;
+        border-color: #0d6efd;
+        color: #fff;
+        box-shadow: 0 8px 20px rgba(13, 110, 253, 0.15);
+        text-decoration: none;
+    }
+
+    .student-form-section {
+        display: none;
+    }
+
+    .student-form-section.active {
+        display: block;
     }
 
     label {
@@ -322,24 +354,48 @@ $result = $student->getAllStudents();
         padding: 1rem 1.25rem 1.25rem;
     }
 
+    .category-editor-form .form-group {
+        flex: 0 0 25%;
+        max-width: 25%;
+    }
+
+    @media (max-width: 767.98px) {
+        .category-editor-form .form-group {
+            flex-basis: 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .category-editor-form .form-group {
+            flex-basis: 100%;
+            max-width: 100%;
+        }
+    }
+
     /* Change font for the student table */
     #studentTable {
-        font-size: 15px;
-        min-width: 1100px;
+        font-size: 13px;
+        min-width: 0;
         width: 100% !important;
+        table-layout: auto;
     }
 
     #studentTable thead th {
-        font-size: 16px;
+        font-size: 13px;
         font-weight: 700;
         color: #212529;
         background-color: #f8f9fa;
+        white-space: nowrap;
+        padding: 0.55rem 0.45rem;
     }
 
     #studentTable tbody td {
-        font-size: 15px;
+        font-size: 13px;
         font-weight: 500;
         color: #212529;
+        white-space: nowrap;
+        padding: 0.55rem 0.45rem;
     }
 
     #studentTable .student-course-cell {
@@ -370,7 +426,16 @@ $result = $student->getAllStudents();
 
     .student-table-wrapper {
         overflow-x: auto;
+        overflow-y: hidden;
         width: 100%;
+    }
+
+    #studentTable .student-course-cell {
+        min-width: 150px;
+    }
+
+    #studentTable .student-actions-cell {
+        min-width: 205px;
     }
 
     .student-load-table {
@@ -720,12 +785,15 @@ $result = $student->getAllStudents();
                         <?php if (isset($_GET['success']) || isset($_GET['deleted']) || isset($_GET['updated'])) { ?>
 
                             <script>
+                                const studentToManageId = <?= isset($_GET['manage_id']) ? (int) $_GET['manage_id'] : 0 ?>;
 
                                 Swal.fire({
 
                                     title: "Success",
 
-                                    text: "Student processed successfully.",
+                                    text: studentToManageId > 0
+                                        ? "Student record created. Complete each category separately in the tabs."
+                                        : "Student processed successfully.",
 
                                     icon: "success",
 
@@ -736,6 +804,16 @@ $result = $student->getAllStudents();
                                     draggable: false
 
                                 }).then(() => {
+                                    if (studentToManageId > 0) {
+                                        const manageButton = Array.from(document.querySelectorAll('.manageStudentBtn'))
+                                            .find((button) => {
+                                                const student = JSON.parse(button.dataset.student);
+                                                return Number(student.ID) === studentToManageId;
+                                            });
+                                        if (manageButton) {
+                                            manageButton.click();
+                                        }
+                                    }
 
                                     window.history.replaceState(
                                         {},
@@ -782,6 +860,52 @@ $result = $student->getAllStudents();
 
                         <?php } ?>
 
+                        <?php if (isset($_GET['invalid'])) { ?>
+
+                            <script>
+                                Swal.fire({
+                                    title: "Check required information",
+                                    text: "Enter a valid 10-digit student number and first and last name.",
+                                    icon: "error",
+                                    confirmButtonText: "OK",
+                                    confirmButtonColor: "#3085d6"
+                                }).then(() => {
+                                    window.history.replaceState({}, document.title, "index.php");
+                                });
+                            </script>
+
+                        <?php } ?>
+
+                        <?php if (isset($_GET['category_saved'])) { ?>
+                            <div class="alert alert-success alert-dismissible" role="status">
+                                <?= htmlspecialchars(ucfirst((string) $_GET['category_saved'])) ?> information saved. Other categories were left unchanged.
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span>&times;</span></button>
+                            </div>
+                        <?php } ?>
+
+                        <?php if (isset($_GET['category_error'])) { ?>
+                            <div class="alert alert-danger alert-dismissible" role="alert">
+                                Unable to save <?= htmlspecialchars(ucfirst((string) $_GET['category_error'])) ?> information. Check that the required fields are filled in and any email address is valid.
+                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span>&times;</span></button>
+                            </div>
+                        <?php } ?>
+
+                        <?php if (isset($_GET['save_error'])) { ?>
+
+                            <script>
+                                Swal.fire({
+                                    title: "Unable to save student",
+                                    text: "The student record could not be saved. Please try again.",
+                                    icon: "error",
+                                    confirmButtonText: "OK",
+                                    confirmButtonColor: "#3085d6"
+                                }).then(() => {
+                                    window.history.replaceState({}, document.title, "index.php");
+                                });
+                            </script>
+
+                        <?php } ?>
+
 
                         <!-- Registration Form -->
 
@@ -799,196 +923,210 @@ $result = $student->getAllStudents();
                             </div>
 
 
-                            <form method="POST">
+                            <form method="POST" id="addStudentForm" novalidate>
 
                                 <div class="card-body">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                                    <p class="text-muted">Enter details in the appropriate category. Student number and name are in Personal Information; Academic and Emergency Contact details are optional.</p>
 
-                                    <div class="row">
+                                    <div class="student-form-tabs" role="tablist" aria-label="Student information categories">
+                                        <a href="#student-personal" class="student-form-tab active" data-target="student-personal" role="tab" aria-selected="true">Personal Information</a>
+                                        <a href="#student-academic" class="student-form-tab" data-target="student-academic" role="tab" aria-selected="false">Academic Information</a>
+                                        <a href="#student-emergency" class="student-form-tab" data-target="student-emergency" role="tab" aria-selected="false">Emergency Contact Information</a>
+                                    </div>
 
-                                        <div class="col-md-3">
-                                            <label>Student No.</label>
-                                            <input type="text" name="student_no" id="add_student_no" class="form-control"
-                                                maxlength="10" placeholder="Enter Student No." required>
-                                        </div>
+                                    <div id="student-personal" class="student-form-section active" role="tabpanel">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <label for="add_student_no">Student No.</label>
+                                                <input type="text" name="student_no" id="add_student_no" class="form-control"
+                                                    maxlength="10" inputmode="numeric" pattern="[0-9]{10}" title="Enter exactly 10 digits."
+                                                    placeholder="Enter Student No." required>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>First Name</label>
-                                            <input type="text" id="add_fname" name="fname" class="form-control"
-                                                placeholder="Enter First Name" required>
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label for="add_fname">First Name</label>
+                                                <input type="text" id="add_fname" name="fname" class="form-control"
+                                                    placeholder="Enter First Name" required>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Middle Name</label>
-                                            <input type="text" id="add_mname" name="mname" class="form-control"
-                                                placeholder="Enter Middle Name">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label for="add_mname">Middle Name</label>
+                                                <input type="text" id="add_mname" name="mname" class="form-control"
+                                                    placeholder="Enter Middle Name">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Last Name</label>
-                                            <input type="text" id="add_lname" name="lname" class="form-control"
-                                                placeholder="Enter Last Name" required>
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label for="add_lname">Last Name</label>
+                                                <input type="text" id="add_lname" name="lname" class="form-control"
+                                                    placeholder="Enter Last Name" required>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Date of Birth</label>
-                                            <input type="date" name="date_of_birth" class="form-control">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Date of Birth</label>
+                                                <input type="date" name="date_of_birth" class="form-control">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Gender</label>
-                                            <select name="gender" class="form-control">
-                                                <option value="">Select Gender</option>
-                                                <option value="Female">Female</option>
-                                                <option value="Male">Male</option>
-                                                <option value="Non-binary">Non-binary</option>
-                                                <option value="Prefer not to say">Prefer not to say</option>
-                                            </select>
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Gender</label>
+                                                <select name="gender" class="form-control">
+                                                    <option value="">Select Gender</option>
+                                                    <option value="Female">Female</option>
+                                                    <option value="Male">Male</option>
+                                                    <option value="Non-binary">Non-binary</option>
+                                                    <option value="Prefer not to say">Prefer not to say</option>
+                                                </select>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Civil Status</label>
-                                            <select name="civil_status" class="form-control">
-                                                <option value="">Select Status</option>
-                                                <option value="Single">Single</option>
-                                                <option value="Married">Married</option>
-                                                <option value="Divorced">Divorced</option>
-                                                <option value="Widowed">Widowed</option>
-                                            </select>
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Civil Status</label>
+                                                <select name="civil_status" class="form-control">
+                                                    <option value="">Select Status</option>
+                                                    <option value="Single">Single</option>
+                                                    <option value="Married">Married</option>
+                                                    <option value="Divorced">Divorced</option>
+                                                    <option value="Widowed">Widowed</option>
+                                                </select>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Nationality</label>
-                                            <input type="text" name="nationality" class="form-control" placeholder="Enter Nationality">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Nationality</label>
+                                                <input type="text" name="nationality" class="form-control" placeholder="Enter Nationality">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Contact Number</label>
-                                            <input type="text" name="contact_number" class="form-control" maxlength="30" placeholder="Enter Contact Number">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Contact Number</label>
+                                                <input type="text" name="contact_number" class="form-control" maxlength="30" placeholder="Enter Contact Number">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Email</label>
-                                            <input type="email" id="add_email" name="email" placeholder="Enter Email" class="form-control" required>
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Email</label>
+                                                <input type="email" id="add_email" name="email" placeholder="Enter Email (optional)" class="form-control">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>House / Unit No.</label>
-                                            <input type="text" name="house_unit_no" class="form-control" placeholder="Enter House or Unit No.">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>House / Unit No.</label>
+                                                <input type="text" name="house_unit_no" class="form-control" placeholder="Enter House or Unit No.">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Street</label>
-                                            <input type="text" name="street" class="form-control" placeholder="Enter Street">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Street</label>
+                                                <input type="text" name="street" class="form-control" placeholder="Enter Street">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Barangay</label>
-                                            <input type="text" name="barangay" class="form-control" placeholder="Enter Barangay">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Barangay</label>
+                                                <input type="text" name="barangay" class="form-control" placeholder="Enter Barangay">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>City / Municipality</label>
-                                            <input type="text" name="city_municipality" class="form-control" placeholder="Enter City or Municipality">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>City / Municipality</label>
+                                                <input type="text" name="city_municipality" class="form-control" placeholder="Enter City or Municipality">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Province</label>
-                                            <input type="text" name="province" class="form-control" placeholder="Enter Province">
+                                            <div class="col-md-3">
+                                                <label>Province</label>
+                                                <input type="text" name="province" class="form-control" placeholder="Enter Province">
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div class="row">
-                                        <div class="col-md-3">
-                                            <label>Program / Course</label>
-                                            <select name="course" class="form-control" required>
-                                                <option value="">Select Course</option>
-                                                <?php foreach ($courseOptions as $courseOption): ?>
-                                                    <option value="<?= htmlspecialchars($courseOption['name']) ?>">
-                                                        <?= htmlspecialchars($courseOption['code'] . ' - ' . $courseOption['name']) ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                        </div>
-
-                                        <div class="col-md-3">
-                                            <label>Year Level</label>
-                                            <input type="text" name="year_level" class="form-control" placeholder="Enter Year Level">
-                                        </div>
-
-                                        <div class="col-md-3">
-                                            <label>Academic Year</label>
-                                            <select name="school_year" class="form-control" required>
-                                                <?php if (empty($schoolYearOptions)): ?>
-                                                    <option value="">No school year available</option>
-                                                <?php else: ?>
-                                                    <option value="">Select School Year</option>
-                                                    <?php foreach ($schoolYearOptions as $year): ?>
-                                                        <option value="<?= htmlspecialchars($year) ?>"><?= htmlspecialchars($year) ?></option>
+                                    <div id="student-academic" class="student-form-section" role="tabpanel">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <label>Program / Course</label>
+                                                <select name="course" class="form-control">
+                                                    <option value="">Select Course</option>
+                                                    <?php foreach ($courseOptions as $courseOption): ?>
+                                                        <option value="<?= htmlspecialchars($courseOption['name']) ?>">
+                                                            <?= htmlspecialchars($courseOption['code'] . ' - ' . $courseOption['name']) ?>
+                                                        </option>
                                                     <?php endforeach; ?>
-                                                <?php endif; ?>
-                                            </select>
-                                        </div>
+                                                </select>
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Department</label>
-                                            <input type="text" name="department" class="form-control" placeholder="Enter Department">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Year Level</label>
+                                                <input type="text" name="year_level" class="form-control" placeholder="Enter Year Level">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Current GPA / Grade</label>
-                                            <input type="text" name="current_gpa" class="form-control" maxlength="20" placeholder="Enter GPA or Grade">
+                                            <div class="col-md-3">
+                                                <label>Academic Year</label>
+                                                <select name="school_year" class="form-control">
+                                                    <?php if (empty($schoolYearOptions)): ?>
+                                                        <option value="">No school year available</option>
+                                                    <?php else: ?>
+                                                        <option value="">Select School Year</option>
+                                                        <?php foreach ($schoolYearOptions as $year): ?>
+                                                            <option value="<?= htmlspecialchars($year) ?>"><?= htmlspecialchars($year) ?></option>
+                                                        <?php endforeach; ?>
+                                                    <?php endif; ?>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-md-3">
+                                                <label>Department</label>
+                                                <input type="text" name="department" class="form-control" placeholder="Enter Department">
+                                            </div>
+
+                                            <div class="col-md-3">
+                                                <label>Current GPA / Grade</label>
+                                                <input type="text" name="current_gpa" class="form-control" maxlength="20" placeholder="Enter GPA or Grade">
+                                            </div>
                                         </div>
                                     </div>
 
-                                    <div class="row">
-                                        <div class="col-md-3">
-                                            <label>Emergency First Name</label>
-                                            <input type="text" name="emergency_first_name" class="form-control" placeholder="Enter First Name">
-                                        </div>
+                                    <div id="student-emergency" class="student-form-section" role="tabpanel">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <label>Emergency First Name</label>
+                                                <input type="text" name="emergency_first_name" class="form-control" placeholder="Enter First Name">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Middle Name</label>
-                                            <input type="text" name="emergency_middle_name" class="form-control" placeholder="Enter Middle Name">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Middle Name</label>
+                                                <input type="text" name="emergency_middle_name" class="form-control" placeholder="Enter Middle Name">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Last Name</label>
-                                            <input type="text" name="emergency_last_name" class="form-control" placeholder="Enter Last Name">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Last Name</label>
+                                                <input type="text" name="emergency_last_name" class="form-control" placeholder="Enter Last Name">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Contact Number</label>
-                                            <input type="text" name="emergency_contact_number" class="form-control" maxlength="30" placeholder="Enter Contact Number">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Contact Number</label>
+                                                <input type="text" name="emergency_contact_number" class="form-control" maxlength="30" placeholder="Enter Contact Number">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Email</label>
-                                            <input type="email" name="emergency_email" class="form-control" placeholder="Enter Email">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Email</label>
+                                                <input type="email" name="emergency_email" class="form-control" placeholder="Enter Email">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency House / Unit No.</label>
-                                            <input type="text" name="emergency_house_unit_no" class="form-control" placeholder="Enter House or Unit No.">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency House / Unit No.</label>
+                                                <input type="text" name="emergency_house_unit_no" class="form-control" placeholder="Enter House or Unit No.">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Street</label>
-                                            <input type="text" name="emergency_street" class="form-control" placeholder="Enter Street">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Street</label>
+                                                <input type="text" name="emergency_street" class="form-control" placeholder="Enter Street">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Barangay</label>
-                                            <input type="text" name="emergency_barangay" class="form-control" placeholder="Enter Barangay">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency Barangay</label>
+                                                <input type="text" name="emergency_barangay" class="form-control" placeholder="Enter Barangay">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency City / Municipality</label>
-                                            <input type="text" name="emergency_city_municipality" class="form-control" placeholder="Enter City or Municipality">
-                                        </div>
+                                            <div class="col-md-3">
+                                                <label>Emergency City / Municipality</label>
+                                                <input type="text" name="emergency_city_municipality" class="form-control" placeholder="Enter City or Municipality">
+                                            </div>
 
-                                        <div class="col-md-3">
-                                            <label>Emergency Province</label>
-                                            <input type="text" name="emergency_province" class="form-control" placeholder="Enter Province">
+                                            <div class="col-md-3">
+                                                <label>Emergency Province</label>
+                                                <input type="text" name="emergency_province" class="form-control" placeholder="Enter Province">
+                                            </div>
                                         </div>
                                     </div>
 
@@ -996,11 +1134,11 @@ $result = $student->getAllStudents();
 
                                 <div class="card-footer d-flex align-items-center">
 
-                                    <button type="submit" name="save" class="btn btn-primary">
+                                    <button type="submit" name="create_student" class="btn btn-primary">
 
                                         <i class="fas fa-save"></i>
 
-                                        Save Student
+                                        Create Student Record
 
                                     </button>
 
@@ -1060,6 +1198,38 @@ $result = $student->getAllStudents();
 
                                                 <th>Email</th>
 
+                                                <th>Date of Birth</th>
+
+                                                <th>Gender</th>
+
+                                                <th>Civil Status</th>
+
+                                                <th>Contact Number</th>
+
+                                                <th>House / Unit No.</th>
+
+                                                <th>Street</th>
+
+                                                <th>Barangay</th>
+
+                                                <th>City / Municipality</th>
+
+                                                <th>Province</th>
+
+                                                <th>Nationality</th>
+
+                                                <th>Year Level</th>
+
+                                                <th>Department</th>
+
+                                                <th>Current GPA</th>
+
+                                                <th>Emergency Contact</th>
+
+                                                <th>Emergency Email</th>
+
+                                                <th>Emergency Address</th>
+
                                                 <th width="180">Actions</th>
 
                                             </tr>
@@ -1071,47 +1241,127 @@ $result = $student->getAllStudents();
 
                                             <?php while ($row = $result->fetch_assoc()) { ?>
 
+                                                <?php
+                                                $emergencyContactName = trim(implode(' ', array_filter([
+                                                    $row['Emergency_First_Name'] ?? '',
+                                                    $row['Emergency_Middle_Name'] ?? '',
+                                                    $row['Emergency_Last_Name'] ?? '',
+                                                ], fn($value) => $value !== '')));
+
+                                                $emergencyAddress = trim(implode(', ', array_filter([
+                                                    $row['Emergency_House_Unit_No'] ?? '',
+                                                    $row['Emergency_Street'] ?? '',
+                                                    $row['Emergency_Barangay'] ?? '',
+                                                    $row['Emergency_City_Municipality'] ?? '',
+                                                    $row['Emergency_Province'] ?? '',
+                                                ], fn($value) => $value !== '')));
+
+                                                ?>
+
                                                 <tr>
 
                                                     <td>
-                                                        <?= $row['ID']; ?>
+                                                        <?= htmlspecialchars((string) ($row['ID'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['Student_Number']); ?>
+                                                        <?= htmlspecialchars((string) ($row['Student_Number'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['First_Name']); ?>
+                                                        <?= htmlspecialchars((string) ($row['First_Name'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['Middle_Name']); ?>
+                                                        <?= htmlspecialchars((string) ($row['Middle_Name'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['Last_Name']); ?>
+                                                        <?= htmlspecialchars((string) ($row['Last_Name'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td class="student-course-cell">
-                                                        <?= htmlspecialchars($row['Course']); ?>
+                                                        <?= htmlspecialchars((string) ($row['Course'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['School_Year']); ?>
+                                                        <?= htmlspecialchars((string) ($row['School_Year'] ?? '')); ?>
                                                     </td>
 
 
                                                     <td>
-                                                        <?= htmlspecialchars($row['Email']); ?>
+                                                        <?= htmlspecialchars((string) ($row['Email'] ?? '')); ?>
                                                     </td>
 
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Date_Of_Birth'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Gender'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Civil_Status'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Contact_Number'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['House_Unit_No'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Street'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Barangay'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['City_Municipality'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Province'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Nationality'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Year_Level'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Department'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Current_GPA'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars($emergencyContactName !== '' ? $emergencyContactName : ''); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars((string) ($row['Emergency_Email'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= htmlspecialchars($emergencyAddress !== '' ? $emergencyAddress : ''); ?>
+                                                    </td>
 
                                                     <td class="text-center student-actions-cell">
 
@@ -1120,20 +1370,13 @@ $result = $student->getAllStudents();
 
                                                             <!-- Edit -->
 
-                                                            <button class="btn btn-info btn-sm action-btn mr-1 viewBtn"
-                                                                data-id="<?= $row['ID']; ?>"
-                                                                data-studentno="<?= htmlspecialchars($row['Student_Number']); ?>"
-                                                                data-fname="<?= htmlspecialchars($row['First_Name']); ?>"
-                                                                data-mname="<?= htmlspecialchars($row['Middle_Name']); ?>"
-                                                                data-lname="<?= htmlspecialchars($row['Last_Name']); ?>"
-                                                                data-course="<?= htmlspecialchars($row['Course']); ?>"
-                                                                data-schoolyear="<?= htmlspecialchars($row['School_Year']); ?>"
-                                                                data-email="<?= htmlspecialchars($row['Email']); ?>"
+                                                            <button class="btn btn-info btn-sm action-btn mr-1 manageStudentBtn"
+                                                                data-student="<?= htmlspecialchars(json_encode($row, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT), ENT_QUOTES, 'UTF-8') ?>"
                                                                 data-toggle="modal" data-target="#viewModal">
 
                                                                 <i class="fas fa-edit"></i>
 
-                                                                Edit
+                                                                Manage Info
 
                                                             </button>
 
@@ -1149,6 +1392,19 @@ $result = $student->getAllStudents();
                                                                 data-course="<?= htmlspecialchars($row['Course']); ?>"
                                                                 data-schoolyear="<?= htmlspecialchars($row['School_Year']); ?>"
                                                                 data-email="<?= htmlspecialchars($row['Email']); ?>"
+                                                                data-dateofbirth="<?= htmlspecialchars((string) ($row['Date_Of_Birth'] ?? '')); ?>"
+                                                                data-gender="<?= htmlspecialchars((string) ($row['Gender'] ?? '')); ?>"
+                                                                data-civilstatus="<?= htmlspecialchars((string) ($row['Civil_Status'] ?? '')); ?>"
+                                                                data-contactnumber="<?= htmlspecialchars((string) ($row['Contact_Number'] ?? '')); ?>"
+                                                                data-nationality="<?= htmlspecialchars((string) ($row['Nationality'] ?? '')); ?>"
+                                                                data-yearlevel="<?= htmlspecialchars((string) ($row['Year_Level'] ?? '')); ?>"
+                                                                data-department="<?= htmlspecialchars((string) ($row['Department'] ?? '')); ?>"
+                                                                data-currentgpa="<?= htmlspecialchars((string) ($row['Current_GPA'] ?? '')); ?>"
+                                                                data-emergencyfirstname="<?= htmlspecialchars((string) ($row['Emergency_First_Name'] ?? '')); ?>"
+                                                                data-emergencymiddlename="<?= htmlspecialchars((string) ($row['Emergency_Middle_Name'] ?? '')); ?>"
+                                                                data-emergencylastname="<?= htmlspecialchars((string) ($row['Emergency_Last_Name'] ?? '')); ?>"
+                                                                data-emergencycontactnumber="<?= htmlspecialchars((string) ($row['Emergency_Contact_Number'] ?? '')); ?>"
+                                                                data-emergencyemail="<?= htmlspecialchars((string) ($row['Emergency_Email'] ?? '')); ?>"
                                                                 data-toggle="modal" data-target="#infoModal">
 
                                                                 <i class="fas fa-eye"></i>
@@ -1383,148 +1639,192 @@ $result = $student->getAllStudents();
     </div>
 
 
-    <!-- Edit Student Modal -->
+    <!-- Student Category Editor -->
 
     <div class="modal fade" id="viewModal">
-
-        <div class="modal-dialog">
-
+        <div class="modal-dialog modal-xl">
             <div class="modal-content">
-
-                <form action="update.php" method="POST">
-
-
-                    <div class="modal-header bg-primary">
-
-                        <h4 class="modal-title">
-
-                            Student Information
-
-                        </h4>
-
-
-                        <button type="button" class="close" data-dismiss="modal">
-
-                            <span>&times;</span>
-
-                        </button>
-
+                <div class="modal-header bg-primary text-white">
+                    <h4 class="modal-title">Manage Student Information</h4>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Save each category separately. Unchanged categories are not submitted or overwritten.</p>
+                    <div class="student-form-tabs" role="tablist" aria-label="Student information categories">
+                        <button type="button" class="student-form-tab active" data-category-tab="personal" aria-selected="true">Personal Information</button>
+                        <button type="button" class="student-form-tab" data-category-tab="academic" aria-selected="false">Academic Information</button>
+                        <button type="button" class="student-form-tab" data-category-tab="emergency" aria-selected="false">Emergency Contact Information</button>
                     </div>
 
-
-                    <div class="modal-body">
-
-
-                        <input type="hidden" name="id" id="studentID">
-
-
-                        <div class="form-group">
-
-                            <label>Student No.</label>
-
-                            <input type="text" class="form-control" name="student_no" id="update_student_no"
-                                maxlength="10" required>
-
+                    <form class="category-editor-form" id="personalCategoryForm" action="Controller/Student/update-category.php" method="post" data-category-panel="personal">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                        <input type="hidden" name="student_id" class="category-student-id">
+                        <input type="hidden" name="category" value="personal">
+                        <div class="row">
+                            <div class="form-group col-md-3">
+                                <label>Student No. <span class="text-danger">*</span></label>
+                                <input class="form-control" name="student_no" data-student-field="Student_Number" maxlength="10" inputmode="numeric" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>First Name <span class="text-danger">*</span></label>
+                                <input class="form-control" name="first_name" data-student-field="First_Name" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Middle Name</label>
+                                <input class="form-control" name="middle_name" data-student-field="Middle_Name">
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Last Name <span class="text-danger">*</span></label>
+                                <input class="form-control" name="last_name" data-student-field="Last_Name" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Date of Birth</label>
+                                <input type="date" class="form-control" name="date_of_birth" data-student-field="Date_Of_Birth">
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Gender</label>
+                                <select class="form-control" name="gender" data-student-field="Gender">
+                                    <option value="">Select Gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Civil Status</label>
+                                <select class="form-control" name="civil_status" data-student-field="Civil_Status">
+                                    <option value="">Select Status</option><option>Single</option><option>Married</option><option>Divorced</option><option>Widowed</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Contact Number</label>
+                                <input class="form-control" name="contact_number" data-student-field="Contact_Number" maxlength="30">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Email</label>
+                                <input type="email" class="form-control" name="email" data-student-field="Email">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Nationality</label>
+                                <input class="form-control" name="nationality" data-student-field="Nationality">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>House / Unit No.</label>
+                                <input class="form-control" name="house_unit_no" data-student-field="House_Unit_No">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Street</label>
+                                <input class="form-control" name="street" data-student-field="Street">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Barangay</label>
+                                <input class="form-control" name="barangay" data-student-field="Barangay">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>City / Municipality</label>
+                                <input class="form-control" name="city_municipality" data-student-field="City_Municipality">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Province</label>
+                                <input class="form-control" name="province" data-student-field="Province">
+                            </div>
                         </div>
+                        <button type="submit" class="btn btn-success"><i class="fas fa-save mr-1"></i>Save Personal Information</button>
+                    </form>
 
-
-                        <div class="form-group">
-
-                            <label>First Name</label>
-
-                            <input type="text" class="form-control" name="fname" id="fname" required>
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label>Middle Name</label>
-
-                            <input type="text" class="form-control" name="mname" id="mname">
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label>Last Name</label>
-
-                            <input type="text" class="form-control" name="lname" id="lname" required>
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label>Course</label>
-
-                            <select class="form-control" name="course" id="course" required>
-                                <option value="">Select Course</option>
-                                <?php foreach ($courseOptions as $courseOption): ?>
-                                    <option value="<?= htmlspecialchars($courseOption['name']) ?>">
-                                        <?= htmlspecialchars($courseOption['code'] . ' - ' . $courseOption['name']) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-
-                        </div>
-
-
-                        <div class="form-group">
-
-                            <label>School Year</label>
-
-                            <select class="form-control" name="school_year" id="school_year" required>
-                                <?php if (empty($schoolYearOptions)): ?>
-                                    <option value="">No school year available</option>
-                                <?php else: ?>
-                                    <option value="">Select School Year</option>
+                    <form class="category-editor-form" id="academicCategoryForm" action="Controller/Student/update-category.php" method="post" data-category-panel="academic" hidden>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                        <input type="hidden" name="student_id" class="category-student-id">
+                        <input type="hidden" name="category" value="academic">
+                        <div class="row">
+                            <div class="form-group col-md-4">
+                                <label>Program / Course <span class="text-danger">*</span></label>
+                                <select class="form-control" name="course" data-student-field="Course" required>
+                                    <option value="">Select Course</option>
+                                    <?php foreach ($courseOptions as $courseOption): ?>
+                                        <option value="<?= htmlspecialchars($courseOption['name']) ?>"><?= htmlspecialchars($courseOption['code'] . ' - ' . $courseOption['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Year Level <span class="text-danger">*</span></label>
+                                <input class="form-control" name="year_level" data-student-field="Year_Level" required>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Academic Year</label>
+                                <select class="form-control" name="school_year" data-student-field="School_Year">
+                                    <option value="">Not specified</option>
                                     <?php foreach ($schoolYearOptions as $year): ?>
                                         <option value="<?= htmlspecialchars($year) ?>"><?= htmlspecialchars($year) ?></option>
                                     <?php endforeach; ?>
-                                <?php endif; ?>
-                            </select>
-
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Department</label>
+                                <input class="form-control" name="department" data-student-field="Department">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Current GPA / Grade</label>
+                                <input class="form-control" name="current_gpa" data-student-field="Current_GPA" maxlength="20">
+                            </div>
                         </div>
+                        <button type="submit" class="btn btn-success"><i class="fas fa-save mr-1"></i>Save Academic Information</button>
+                    </form>
 
-
-                        <div class="form-group">
-
-                            <label>Email</label>
-
-                            <input type="email" class="form-control" name="email" id="update_email" required>
-
+                    <form class="category-editor-form" id="emergencyCategoryForm" action="Controller/Student/update-category.php" method="post" data-category-panel="emergency" hidden>
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                        <input type="hidden" name="student_id" class="category-student-id">
+                        <input type="hidden" name="category" value="emergency">
+                        <div class="row">
+                            <div class="form-group col-md-4">
+                                <label>First Name</label>
+                                <input class="form-control" name="emergency_first_name" data-student-field="Emergency_First_Name">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Middle Name</label>
+                                <input class="form-control" name="emergency_middle_name" data-student-field="Emergency_Middle_Name">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Last Name</label>
+                                <input class="form-control" name="emergency_last_name" data-student-field="Emergency_Last_Name">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Contact Number</label>
+                                <input class="form-control" name="emergency_contact_number" data-student-field="Emergency_Contact_Number" maxlength="30">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Email</label>
+                                <input type="email" class="form-control" name="emergency_email" data-student-field="Emergency_Email">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>House / Unit No.</label>
+                                <input class="form-control" name="emergency_house_unit_no" data-student-field="Emergency_House_Unit_No">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Street</label>
+                                <input class="form-control" name="emergency_street" data-student-field="Emergency_Street">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Barangay</label>
+                                <input class="form-control" name="emergency_barangay" data-student-field="Emergency_Barangay">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>City / Municipality</label>
+                                <input class="form-control" name="emergency_city_municipality" data-student-field="Emergency_City_Municipality">
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Province</label>
+                                <input class="form-control" name="emergency_province" data-student-field="Emergency_Province">
+                            </div>
                         </div>
-
-                    </div>
-
-
-                    <div class="modal-footer">
-
-                        <button type="submit" id="updateBtn" class="btn btn-success" disabled>
-
-                            <i class="fas fa-save"></i>
-
-                            Update
-
-                        </button>
-
-
-                        <button type="button" class="btn btn-secondary" data-dismiss="modal">
-
-                            Close
-
-                        </button>
-
-                    </div>
-
-                </form>
-
+                        <p class="small text-muted">Emergency contact details are optional. Save an empty form to clear this category.</p>
+                        <button type="submit" class="btn btn-success"><i class="fas fa-save mr-1"></i>Save Emergency Information</button>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
             </div>
-
         </div>
-
     </div>
 
 
@@ -1555,6 +1855,24 @@ $result = $student->getAllStudents();
     <script>
 
         $(document).ready(function () {
+
+            $('.student-entry-card .student-form-tab[data-target]').on('click', function (event) {
+                event.preventDefault();
+                const target = $(this).data('target');
+                const formCard = $(this).closest('.student-entry-card');
+
+                formCard.find('.student-form-tab[data-target]')
+                    .removeClass('active')
+                    .attr('aria-selected', 'false');
+                $(this).addClass('active').attr('aria-selected', 'true');
+
+                formCard.find('.student-form-section')
+                    .removeClass('active')
+                    .hide();
+                formCard.find('#' + target)
+                    .addClass('active')
+                    .show();
+            });
 
             // Initialize DataTable
 
@@ -1638,6 +1956,26 @@ $result = $student->getAllStudents();
             function escapeHtml(value) {
                 return $('<div>').text(value == null ? '' : value).html();
             }
+
+            $('#viewModal .student-form-tab[data-category-tab]').on('click', function () {
+                const category = $(this).data('category-tab');
+                $('#viewModal .student-form-tab[data-category-tab]')
+                    .removeClass('active')
+                    .attr('aria-selected', 'false');
+                $(this).addClass('active').attr('aria-selected', 'true');
+                $('#viewModal .category-editor-form').prop('hidden', true);
+                $('#viewModal .category-editor-form[data-category-panel="' + category + '"]').prop('hidden', false);
+            });
+
+            $('.manageStudentBtn').on('click', function () {
+                const student = JSON.parse(this.dataset.student);
+                $('.category-student-id').val(student.ID);
+                $('#viewModal [data-student-field]').each(function () {
+                    const field = this.dataset.studentField;
+                    $(this).val(student[field] == null ? '' : student[field]);
+                });
+                $('#viewModal .student-form-tab[data-category-tab="personal"]').trigger('click');
+            });
 
             $('.infoBtn').click(function () {
 
@@ -1779,14 +2117,10 @@ $result = $student->getAllStudents();
 
                 // Allow letters, spaces, periods and hyphens only
 
-                input.value =
-                    input.value.replace(
-                        /[^a-zA-Z.\-\s]/g,
-                        ''
-                    );
+                input.value = input.value.replace(/[^\p{L}.'\-\s]/gu, '');
 
 
-                if (input.value.trim() == "") {
+                if (input.required && input.value.trim() == "") {
 
                     input.setCustomValidity(
                         "This field is required."
@@ -1812,9 +2146,7 @@ $result = $student->getAllStudents();
 
                 if (input.value.trim() == "") {
 
-                    input.setCustomValidity(
-                        "Email is required."
-                    );
+                    input.setCustomValidity("");
 
                 }
                 else if (!emailPattern.test(input.value)) {
@@ -1981,143 +2313,25 @@ $result = $student->getAllStudents();
 
             // Add Form Validation
 
-            $('form:not([action])').submit(function (e) {
+            $('#addStudentForm').on('submit', function (event) {
+                const studentNumber = $('#add_student_no').val().trim();
+                const firstName = $('#add_fname').val().trim();
+                const middleName = $('#add_mname').val().trim();
+                const lastName = $('#add_lname').val().trim();
+                const validName = /^[\p{L}.'\-\s]+$/u;
 
-                let student_no =
-                    $('#add_student_no').val().trim();
-
-                let fname =
-                    $('#add_fname').val().trim();
-
-                let mname =
-                    $('#add_mname').val().trim();
-
-                let lname =
-                    $('#add_lname').val().trim();
-
-                let email =
-                    $('#add_email').val().trim();
-
-                const validCourses = <?= json_encode(array_column($courseOptions, 'name')) ?>;
-
-                const selectedCourse = $('#add_student_no').closest('form').find('select[name="course"]').val();
-
-                if (!validCourses.includes(selectedCourse)) {
-                    e.preventDefault();
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Invalid Course',
-                        text: 'Please select a valid course from the list.'
-                    });
-                    return false;
+                let message = '';
+                if (!/^\d{10}$/.test(studentNumber)) {
+                    message = 'Student number must contain exactly 10 digits.';
+                } else if (!validName.test(firstName) || !validName.test(lastName) ||
+                    (middleName !== '' && !validName.test(middleName))) {
+                    message = 'Names may contain letters, spaces, apostrophes, periods, and hyphens only.';
                 }
 
-                if (!/^\d{10}$/.test(student_no)) {
-
-                    e.preventDefault();
-
-                    Swal.fire({
-
-                        icon: 'error',
-
-                        title: 'Invalid Student Number',
-
-                        text:
-                            'Student Number must contain exactly 10 digits and numbers only.'
-
-                    });
-
-                    return false;
-
+                if (message !== '') {
+                    event.preventDefault();
+                    Swal.fire({ icon: 'error', title: 'Check basic student information', text: message });
                 }
-
-
-                if (!/^[A-Za-z.\-\s]+$/.test(fname)) {
-
-                    e.preventDefault();
-
-                    Swal.fire({
-
-                        icon: 'error',
-
-                        title: 'Invalid First Name',
-
-                        text:
-                            'First Name must contain letters only.'
-
-                    });
-
-                    return false;
-
-                }
-
-
-                if (
-                    mname !== "" &&
-                    !/^[A-Za-z.\-\s]+$/.test(mname)
-                ) {
-
-                    e.preventDefault();
-
-                    Swal.fire({
-
-                        icon: 'error',
-
-                        title: 'Invalid Middle Name',
-
-                        text:
-                            'Middle Name must contain letters only.'
-
-                    });
-
-                    return false;
-
-                }
-
-
-                if (!/^[A-Za-z.\-\s]+$/.test(lname)) {
-
-                    e.preventDefault();
-
-                    Swal.fire({
-
-                        icon: 'error',
-
-                        title: 'Invalid Last Name',
-
-                        text:
-                            'Last Name must contain letters only.'
-
-                    });
-
-                    return false;
-
-                }
-
-
-                let emailPattern =
-                    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-
-                if (!emailPattern.test(email)) {
-
-                    e.preventDefault();
-
-                    Swal.fire({
-
-                        icon: 'error',
-
-                        title: 'Invalid Email',
-
-                        text:
-                            'Please enter a valid email address (example: student@gmail.com).'
-
-                    });
-
-                    return false;
-
-                }
-
             });
 
 

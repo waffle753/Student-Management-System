@@ -18,10 +18,12 @@ $curriculumSubjectModel = new CurriculumSubject();
 $studentLoad = $studentView === 'load'
     ? $curriculumSubjectModel->getStudentLoad($student['Course'])
     : null;
-
 $notice = null;
 if (($_GET['status'] ?? '') === 'success') {
-    $notice = ['success', 'Your personal information has been updated.'];
+    $category = (string) ($_GET['category'] ?? 'student');
+    $notice = ['success', $category === 'all'
+        ? 'Your profile information has been updated.'
+        : 'Your ' . ucfirst($category) . ' information has been updated.'];
 } elseif (($_GET['status'] ?? '') === 'error') {
     $notice = ['danger', 'Your changes could not be saved. Please review the information and try again.'];
 }
@@ -40,10 +42,10 @@ if (($_GET['status'] ?? '') === 'success') {
         .account-menu summary { max-width: min(42vw, 260px); overflow-wrap: anywhere; cursor: pointer; list-style: none; }
         .account-menu summary::-webkit-details-marker { display: none; }
         .account-menu-panel { position: absolute; z-index: 1050; top: calc(100% + 8px); right: 0; width: 220px; color: #26383c; background: #fff; border: 1px solid #dce5e5; box-shadow: 0 8px 24px rgba(23, 60, 70, .14); }
-        .profile-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 20px 24px; background: #f5f8f8; border-bottom: 1px solid #e2e9e9; }
-        .summary-label { color: #687b80; font-size: .8rem; text-transform: uppercase; }
-        .summary-value { display: block; margin-top: 4px; color: #173c46; font-weight: 700; overflow-wrap: anywhere; }
         .form-control { min-height: 44px; }
+        .profile-form .form-row { align-items: stretch; }
+        .profile-category { padding-bottom: 1rem; border-bottom: 1px solid #e2e9e9; }
+        .profile-category-heading { margin-bottom: 1rem; color: #007bff; }
         .student-load-table { min-width: 920px; table-layout: fixed; border-color: #d4dce3; }
         .student-load-table th,
         .student-load-table td { padding: .7rem .8rem; vertical-align: middle; border-color: #d4dce3; }
@@ -54,9 +56,6 @@ if (($_GET['status'] ?? '') === 'success') {
         .student-load-table .load-room { white-space: nowrap; }
         .student-load-table tfoot th,
         .student-load-table tfoot td { background: #f7f9fa; }
-        @media (max-width: 640px) {
-            .profile-summary { grid-template-columns: 1fr; gap: 12px; }
-        }
     </style>
 </head>
 <body class="hold-transition sidebar-mini">
@@ -143,18 +142,18 @@ if (($_GET['status'] ?? '') === 'success') {
                         <div class="card-header">
                             <h2 class="card-title">Student Record</h2>
                         </div>
-                        <div class="profile-summary">
-                            <div><span class="summary-label">Student number</span><span class="summary-value"><?= htmlspecialchars($student['Student_Number']) ?></span></div>
-                            <div><span class="summary-label">Program</span><span class="summary-value"><?= htmlspecialchars($student['Course']) ?></span></div>
-                            <div><span class="summary-label">School year</span><span class="summary-value"><?= htmlspecialchars($student['School_Year']) ?></span></div>
-                        </div>
-                        <form method="post" action="Controller/Student/update-profile.php">
-                            <div class="card-body">
+                        <div class="card-body">
+                            <form class="profile-form" method="post" action="Controller/Student/update-category.php">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                                <input type="hidden" name="category" value="all">
 
-                                <section class="mb-4">
-                                    <h3 class="h5 mb-3">1. Personal Information</h3>
+                                <section class="profile-category mb-4">
+                                    <h3 class="h5 profile-category-heading">Personal Information</h3>
                                     <div class="form-row">
+                                        <div class="form-group col-md-4">
+                                            <label for="student_number">Student Number</label>
+                                            <input class="form-control" id="student_number" value="<?= htmlspecialchars($student['Student_Number'] ?? '') ?>" readonly>
+                                        </div>
                                         <div class="form-group col-md-4">
                                             <label for="first_name">First name</label>
                                             <input class="form-control" id="first_name" name="first_name" value="<?= htmlspecialchars($student['First_Name'] ?? '') ?>" maxlength="100" required>
@@ -225,7 +224,7 @@ if (($_GET['status'] ?? '') === 'success') {
                                         </div>
                                         <div class="form-group col-md-4">
                                             <label for="email">Email address</label>
-                                            <input class="form-control" type="email" id="email" name="email" value="<?= htmlspecialchars($student['Email'] ?? '') ?>" maxlength="255" required>
+                                            <input class="form-control" type="email" id="email" name="email" value="<?= htmlspecialchars($student['Email'] ?? '') ?>" maxlength="255">
                                         </div>
                                         <div class="form-group col-md-4">
                                             <label for="nationality">Nationality</label>
@@ -234,13 +233,9 @@ if (($_GET['status'] ?? '') === 'success') {
                                     </div>
                                 </section>
 
-                                <section class="mb-4">
-                                    <h3 class="h5 mb-3">2. Academic Information</h3>
+                                <section class="profile-category mb-4">
+                                    <h3 class="h5 profile-category-heading">Academic Information</h3>
                                     <div class="form-row">
-                                        <div class="form-group col-md-3">
-                                            <label for="student_id">Student ID</label>
-                                            <input class="form-control" id="student_id" name="student_id" value="<?= htmlspecialchars($student['Student_Number'] ?? '') ?>" readonly>
-                                        </div>
                                         <div class="form-group col-md-3">
                                             <label for="program_course">Program / course</label>
                                             <input class="form-control" id="program_course" name="program_course" value="<?= htmlspecialchars($student['Course'] ?? '') ?>" maxlength="255">
@@ -264,8 +259,8 @@ if (($_GET['status'] ?? '') === 'success') {
                                     </div>
                                 </section>
 
-                                <section class="mb-4">
-                                    <h3 class="h5 mb-3">3. Emergency Contact Information</h3>
+                                <section class="profile-category mb-4 border-0">
+                                    <h3 class="h5 profile-category-heading">Emergency Contact Information</h3>
                                     <div class="form-row">
                                         <div class="form-group col-md-4">
                                             <label for="emergency_first_name">First name</label>
@@ -310,14 +305,15 @@ if (($_GET['status'] ?? '') === 'success') {
                                             <input class="form-control" id="emergency_province" name="emergency_province" value="<?= htmlspecialchars($student['Emergency_Province'] ?? '') ?>">
                                         </div>
                                     </div>
+                                    <p class="small text-muted">Emergency contact fields are optional. Saving an empty section clears emergency contact information.</p>
                                 </section>
-                            </div>
-                            <div class="card-footer text-right">
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-save mr-1" aria-hidden="true"></i>Save changes
-                                </button>
-                            </div>
-                        </form>
+                                <div class="text-right">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save mr-1" aria-hidden="true"></i>Save Changes
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
                     <?php else: ?>
                     <div class="card card-outline card-success">
