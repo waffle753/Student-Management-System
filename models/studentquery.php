@@ -6,6 +6,21 @@ class Student
 {
     private $conn;
 
+    public static function calculateAge($dateOfBirth)
+    {
+        if (!is_string($dateOfBirth) || $dateOfBirth === '') {
+            return null;
+        }
+
+        $birthDate = DateTimeImmutable::createFromFormat('!Y-m-d', $dateOfBirth);
+        $today = new DateTimeImmutable('today');
+        if (!$birthDate || $birthDate->format('Y-m-d') !== $dateOfBirth || $birthDate > $today) {
+            return null;
+        }
+
+        return $birthDate->diff($today)->y;
+    }
+
     public function __construct()
     {
         global $conn;

@@ -46,6 +46,7 @@ if (
     ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
     !preg_match($namePattern, $lastName) ||
     !filter_var($email, FILTER_VALIDATE_EMAIL) ||
+    ($yearLevel !== '' && !in_array($yearLevel, ['1', '2', '3', '4', '5'], true)) ||
     ($emergencyFirstName !== '' && !preg_match($namePattern, $emergencyFirstName)) ||
     ($emergencyMiddleName !== '' && !preg_match($namePattern, $emergencyMiddleName)) ||
     ($emergencyLastName !== '' && !preg_match($namePattern, $emergencyLastName)) ||

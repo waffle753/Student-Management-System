@@ -55,9 +55,9 @@ if ($category === 'personal' || $combinedStudentUpdate) {
     $studentNumber = isStudentUser()
         ? (string) $student['Student_Number']
         : $value('student_no');
-    $firstName = $value('first_name');
-    $middleName = $value('middle_name');
-    $lastName = $value('last_name');
+    $firstName = isStudentUser() ? (string) $student['First_Name'] : $value('first_name');
+    $middleName = isStudentUser() ? (string) ($student['Middle_Name'] ?? '') : $value('middle_name');
+    $lastName = isStudentUser() ? (string) $student['Last_Name'] : $value('last_name');
     $email = $value('email');
     $dateOfBirth = $value('date_of_birth');
     $gender = $value('gender');
@@ -65,6 +65,7 @@ if ($category === 'personal' || $combinedStudentUpdate) {
     $birthDate = $dateOfBirth !== ''
         ? DateTime::createFromFormat('!Y-m-d', $dateOfBirth)
         : null;
+    $age = Student::calculateAge($dateOfBirth);
 
     if (
         !preg_match('/^[0-9]{10}$/', $studentNumber) ||
@@ -72,7 +73,7 @@ if ($category === 'personal' || $combinedStudentUpdate) {
         ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
         !preg_match($namePattern, $lastName) ||
         ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) ||
-        ($dateOfBirth !== '' && (!$birthDate || $birthDate->format('Y-m-d') !== $dateOfBirth)) ||
+        !$birthDate || $birthDate->format('Y-m-d') !== $dateOfBirth || $age === null || $age < 18 ||
         !in_array($gender, ['', 'Female', 'Male', 'Non-binary', 'Prefer not to say'], true) ||
         !in_array($civilStatus, ['', 'Single', 'Married', 'Divorced', 'Widowed'], true)
     ) {
@@ -119,7 +120,9 @@ if ($category === 'academic' || $combinedStudentUpdate) {
     }
 
     $academicIsEmpty = $course === '' && $yearLevel === '' && $schoolYear === '' && $department === '' && $currentGpa === '';
-    $academicIsValid = $course !== '' && $yearLevel !== '' && in_array($course, $validCourses, true);
+    $academicIsValid = $course !== '' &&
+        in_array($yearLevel, ['1', '2', '3', '4', '5'], true) &&
+        in_array($course, $validCourses, true);
     if ((!$combinedStudentUpdate && !$academicIsValid) || ($combinedStudentUpdate && !$academicIsEmpty && !$academicIsValid)) {
         redirectCategoryStatus('error', $category);
     }

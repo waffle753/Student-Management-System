@@ -36,6 +36,7 @@ if (($_GET['status'] ?? '') === 'success') {
     <title>My Profile | Student Portal</title>
     <link rel="stylesheet" href="adminlte/plugins/fontawesome-free/css/all.min.css">
     <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .brand-logo { display: inline-block; width: 2rem; text-align: center; }
         .account-menu { position: relative; }
@@ -132,9 +133,20 @@ if (($_GET['status'] ?? '') === 'success') {
             <section class="content">
                 <div class="container-fluid">
                     <?php if ($notice): ?>
-                        <div class="alert alert-<?= htmlspecialchars($notice[0]) ?>" role="status">
-                            <?= htmlspecialchars($notice[1]) ?>
-                        </div>
+                        <script>
+                            Swal.fire({
+                                title: <?= json_encode($notice[0] === 'success' ? 'Saved' : 'Unable to save') ?>,
+                                text: <?= json_encode($notice[1], JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                                icon: <?= json_encode($notice[0] === 'success' ? 'success' : 'error') ?>,
+                                confirmButtonText: 'OK'
+                            }).then(function () {
+                                const url = new URL(window.location.href);
+                                ['status', 'category'].forEach(function (key) {
+                                    url.searchParams.delete(key);
+                                });
+                                window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+                            });
+                        </script>
                     <?php endif; ?>
 
                     <?php if ($studentView === 'profile'): ?>
@@ -145,7 +157,7 @@ if (($_GET['status'] ?? '') === 'success') {
                         <div class="card-body">
                             <form class="profile-form" method="post" action="Controller/Student/update-category.php">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
-                                <input type="hidden" name="category" value="all">
+                                <input type="hidden" name="category" value="personal">
 
                                 <section class="profile-category mb-4">
                                     <h3 class="h5 profile-category-heading">Personal Information</h3>
@@ -156,23 +168,23 @@ if (($_GET['status'] ?? '') === 'success') {
                                         </div>
                                         <div class="form-group col-md-4">
                                             <label for="first_name">First name</label>
-                                            <input class="form-control" id="first_name" name="first_name" value="<?= htmlspecialchars($student['First_Name'] ?? '') ?>" maxlength="100" required>
+                                            <input class="form-control" id="first_name" name="first_name" value="<?= htmlspecialchars($student['First_Name'] ?? '') ?>" maxlength="100" readonly>
                                         </div>
                                         <div class="form-group col-md-4">
                                             <label for="middle_name">Middle name</label>
-                                            <input class="form-control" id="middle_name" name="middle_name" value="<?= htmlspecialchars($student['Middle_Name'] ?? '') ?>" maxlength="100">
+                                            <input class="form-control" id="middle_name" name="middle_name" value="<?= htmlspecialchars($student['Middle_Name'] ?? '') ?>" maxlength="100" readonly>
                                         </div>
                                         <div class="form-group col-md-4">
                                             <label for="last_name">Last name</label>
-                                            <input class="form-control" id="last_name" name="last_name" value="<?= htmlspecialchars($student['Last_Name'] ?? '') ?>" maxlength="100" required>
+                                            <input class="form-control" id="last_name" name="last_name" value="<?= htmlspecialchars($student['Last_Name'] ?? '') ?>" maxlength="100" readonly>
                                         </div>
                                         <div class="form-group col-md-3">
                                             <label for="date_of_birth">Date of birth</label>
-                                            <input class="form-control" id="date_of_birth" name="date_of_birth" type="date" value="<?= htmlspecialchars($student['Date_Of_Birth'] ?? '') ?>">
+                                            <input class="form-control" id="date_of_birth" name="date_of_birth" type="date" value="<?= htmlspecialchars($student['Date_Of_Birth'] ?? '') ?>" max="<?= date('Y-m-d', strtotime('-18 years')) ?>" required>
                                         </div>
                                         <div class="form-group col-md-3">
                                             <label for="age">Age</label>
-                                            <input class="form-control" id="age" type="text" value="" readonly>
+                                            <input class="form-control" id="age" type="text" value="<?= htmlspecialchars((string) (Student::calculateAge((string) ($student['Date_Of_Birth'] ?? '')) ?? '')) ?>" readonly>
                                         </div>
                                         <div class="form-group col-md-3">
                                             <label for="gender">Gender</label>
@@ -232,7 +244,16 @@ if (($_GET['status'] ?? '') === 'success') {
                                         </div>
                                     </div>
                                 </section>
+                                <div class="text-right mb-4">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save mr-1" aria-hidden="true"></i>Save Personal Information
+                                    </button>
+                                </div>
+                            </form>
 
+                            <form class="profile-form" method="post" action="Controller/Student/update-category.php">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                                <input type="hidden" name="category" value="academic">
                                 <section class="profile-category mb-4">
                                     <h3 class="h5 profile-category-heading">Academic Information</h3>
                                     <div class="form-row">
@@ -242,7 +263,12 @@ if (($_GET['status'] ?? '') === 'success') {
                                         </div>
                                         <div class="form-group col-md-3">
                                             <label for="year_level">Year level</label>
-                                            <input class="form-control" id="year_level" name="year_level" value="<?= htmlspecialchars($student['Year_Level'] ?? '') ?>" maxlength="50">
+                                            <select class="form-control" id="year_level" name="year_level" required>
+                                                <option value="">Select Year Level</option>
+                                                <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
+                                                    <option value="<?= $yearLevelOption ?>" <?= (string) ($student['Year_Level'] ?? '') === (string) $yearLevelOption ? 'selected' : '' ?>>Year <?= $yearLevelOption ?></option>
+                                                <?php endfor; ?>
+                                            </select>
                                         </div>
                                         <div class="form-group col-md-3">
                                             <label for="academic_year">Academic year</label>
@@ -258,7 +284,16 @@ if (($_GET['status'] ?? '') === 'success') {
                                         </div>
                                     </div>
                                 </section>
+                                <div class="text-right mb-4">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-save mr-1" aria-hidden="true"></i>Save Academic Information
+                                    </button>
+                                </div>
+                            </form>
 
+                            <form class="profile-form" method="post" action="Controller/Student/update-category.php">
+                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                                <input type="hidden" name="category" value="emergency">
                                 <section class="profile-category mb-4 border-0">
                                     <h3 class="h5 profile-category-heading">Emergency Contact Information</h3>
                                     <div class="form-row">
@@ -309,7 +344,7 @@ if (($_GET['status'] ?? '') === 'success') {
                                 </section>
                                 <div class="text-right">
                                     <button type="submit" class="btn btn-primary">
-                                        <i class="fas fa-save mr-1" aria-hidden="true"></i>Save Changes
+                                        <i class="fas fa-save mr-1" aria-hidden="true"></i>Save Emergency Contact Information
                                     </button>
                                 </div>
                             </form>
@@ -328,9 +363,16 @@ if (($_GET['status'] ?? '') === 'success') {
                         </div>
                         <div class="card-body p-0">
                             <?php if ($studentLoad === false): ?>
-                                <div class="alert alert-danger m-3 mb-0" role="alert">Unable to load your subjects right now.</div>
+                                <script>
+                                    Swal.fire({
+                                        title: 'Unable to load subjects',
+                                        text: 'Unable to load your subjects right now.',
+                                        icon: 'error',
+                                        confirmButtonText: 'OK'
+                                    });
+                                </script>
                             <?php elseif (empty($studentLoad['subjects'])): ?>
-                                <div class="text-muted text-center py-5">No curriculum subjects are currently listed for your program.</div>
+                                    <div class="text-muted text-center py-5">No curriculum subjects are currently listed for your program.</div>
                             <?php else: ?>
                                 <div class="table-responsive">
                                     <table class="table table-bordered table-hover mb-0 student-load-table">

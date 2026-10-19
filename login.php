@@ -20,6 +20,7 @@ $error = $errorMessages[$_GET['error'] ?? ''] ?? '';
     <title>Sign in | Student Management System</title>
     <link rel="stylesheet" href="adminlte/plugins/fontawesome-free/css/all.min.css">
     <link rel="stylesheet" href="adminlte/dist/css/adminlte.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body {
             min-height: 100vh;
@@ -45,7 +46,18 @@ $error = $errorMessages[$_GET['error'] ?? ''] ?? '';
                 </div>
 
                 <?php if ($error !== ''): ?>
-                    <div class="alert alert-danger" role="alert"><?= htmlspecialchars($error) ?></div>
+                    <script>
+                        Swal.fire({
+                            title: 'Sign in failed',
+                            text: <?= json_encode($error, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                            icon: 'error',
+                            confirmButtonText: 'OK'
+                        }).then(function () {
+                            const url = new URL(window.location.href);
+                            url.searchParams.delete('error');
+                            window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+                        });
+                    </script>
                 <?php endif; ?>
 
                 <form method="post" action="Controller/Auth/login.php" autocomplete="on">

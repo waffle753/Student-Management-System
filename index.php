@@ -64,6 +64,19 @@ if (isset($_POST['create_student'])) {
         $value = $_POST[$name] ?? '';
         return is_string($value) ? trim($value) : '';
     };
+    $yearLevel = $field('year_level');
+    if ($yearLevel !== '' && !in_array($yearLevel, ['1', '2', '3', '4', '5'], true)) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
+
+    $dateOfBirth = $field('date_of_birth');
+    $age = Student::calculateAge($dateOfBirth);
+    if ($age === null || $age < 18) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
+
     $email = $field('email');
     $emergencyEmail = $field('emergency_email');
     if (
@@ -82,7 +95,7 @@ if (isset($_POST['create_student'])) {
         $field('course'),
         $field('school_year'),
         $email,
-        $field('date_of_birth'),
+        $dateOfBirth,
         $field('gender'),
         $field('civil_status'),
         $field('house_unit_no'),
@@ -92,7 +105,7 @@ if (isset($_POST['create_student'])) {
         $field('province'),
         $field('contact_number'),
         $field('nationality'),
-        $field('year_level'),
+        $yearLevel,
         $field('department'),
         $field('current_gpa'),
         $field('emergency_first_name'),
@@ -107,7 +120,7 @@ if (isset($_POST['create_student'])) {
         $emergencyEmail
     );
     if ($createdStudentId !== false) {
-        header("Location: index.php?success=1&manage_id=" . (int) $createdStudentId);
+        header("Location: index.php?success=1");
         exit;
     }
 
@@ -388,6 +401,21 @@ $result = $student->getAllStudents();
         background-color: #f8f9fa;
         white-space: nowrap;
         padding: 0.55rem 0.45rem;
+    }
+
+    #studentTable.dataTable thead th:not(.sorting_disabled) {
+        padding-right: 30px;
+    }
+
+    #studentTable.dataTable thead .sorting::before,
+    #studentTable.dataTable thead .sorting::after,
+    #studentTable.dataTable thead .sorting_asc::before,
+    #studentTable.dataTable thead .sorting_asc::after,
+    #studentTable.dataTable thead .sorting_desc::before,
+    #studentTable.dataTable thead .sorting_desc::after {
+        top: 50%;
+        bottom: auto;
+        transform: translateY(-50%);
     }
 
     #studentTable tbody td {
@@ -785,15 +813,11 @@ $result = $student->getAllStudents();
                         <?php if (isset($_GET['success']) || isset($_GET['deleted']) || isset($_GET['updated'])) { ?>
 
                             <script>
-                                const studentToManageId = <?= isset($_GET['manage_id']) ? (int) $_GET['manage_id'] : 0 ?>;
-
                                 Swal.fire({
 
                                     title: "Success",
 
-                                    text: studentToManageId > 0
-                                        ? "Student record created. Complete each category separately in the tabs."
-                                        : "Student processed successfully.",
+                                    text: "Student processed successfully.",
 
                                     icon: "success",
 
@@ -804,17 +828,6 @@ $result = $student->getAllStudents();
                                     draggable: false
 
                                 }).then(() => {
-                                    if (studentToManageId > 0) {
-                                        const manageButton = Array.from(document.querySelectorAll('.manageStudentBtn'))
-                                            .find((button) => {
-                                                const student = JSON.parse(button.dataset.student);
-                                                return Number(student.ID) === studentToManageId;
-                                            });
-                                        if (manageButton) {
-                                            manageButton.click();
-                                        }
-                                    }
-
                                     window.history.replaceState(
                                         {},
                                         document.title,
@@ -876,18 +889,29 @@ $result = $student->getAllStudents();
 
                         <?php } ?>
 
-                        <?php if (isset($_GET['category_saved'])) { ?>
-                            <div class="alert alert-success alert-dismissible" role="status">
-                                <?= htmlspecialchars(ucfirst((string) $_GET['category_saved'])) ?> information saved. Other categories were left unchanged.
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span>&times;</span></button>
-                            </div>
-                        <?php } ?>
-
-                        <?php if (isset($_GET['category_error'])) { ?>
-                            <div class="alert alert-danger alert-dismissible" role="alert">
-                                Unable to save <?= htmlspecialchars(ucfirst((string) $_GET['category_error'])) ?> information. Check that the required fields are filled in and any email address is valid.
-                                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span>&times;</span></button>
-                            </div>
+                        <?php if (isset($_GET['category_saved']) || isset($_GET['category_error'])) {
+                            $categoryNoticeSaved = isset($_GET['category_saved']);
+                            $categoryNoticeName = ucfirst((string) ($_GET['category_saved'] ?? $_GET['category_error'] ?? 'student'));
+                            $categoryNoticeText = $categoryNoticeSaved
+                                ? $categoryNoticeName . ' information saved. Other categories were left unchanged.'
+                                : 'Unable to save ' . $categoryNoticeName . ' information. Check that the required fields are filled in and any email address is valid.';
+                        ?>
+                            <script>
+                                (function () {
+                                    Swal.fire({
+                                        title: <?= json_encode($categoryNoticeSaved ? 'Saved' : 'Save failed') ?>,
+                                        text: <?= json_encode($categoryNoticeText, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
+                                        icon: <?= json_encode($categoryNoticeSaved ? 'success' : 'error') ?>,
+                                        confirmButtonText: 'OK'
+                                    }).then(function () {
+                                        const url = new URL(window.location.href);
+                                        ['category_saved', 'category_error'].forEach(function (key) {
+                                            url.searchParams.delete(key);
+                                        });
+                                        window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+                                    });
+                                })();
+                            </script>
                         <?php } ?>
 
                         <?php if (isset($_GET['save_error'])) { ?>
@@ -963,8 +987,13 @@ $result = $student->getAllStudents();
                                             </div>
 
                                             <div class="col-md-3">
-                                                <label>Date of Birth</label>
-                                                <input type="date" name="date_of_birth" class="form-control">
+                                                <label for="add_date_of_birth">Date of Birth</label>
+                                                <input type="date" name="date_of_birth" id="add_date_of_birth" class="form-control" max="<?= date('Y-m-d', strtotime('-18 years')) ?>" required>
+                                            </div>
+
+                                            <div class="col-md-3">
+                                                <label for="add_student_age">Age</label>
+                                                <input type="text" id="add_student_age" class="form-control" readonly>
                                             </div>
 
                                             <div class="col-md-3">
@@ -1047,7 +1076,12 @@ $result = $student->getAllStudents();
 
                                             <div class="col-md-3">
                                                 <label>Year Level</label>
-                                                <input type="text" name="year_level" class="form-control" placeholder="Enter Year Level">
+                                                <select name="year_level" class="form-control">
+                                                    <option value="">Select Year Level</option>
+                                                    <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
+                                                        <option value="<?= $yearLevelOption ?>">Year <?= $yearLevelOption ?></option>
+                                                    <?php endfor; ?>
+                                                </select>
                                             </div>
 
                                             <div class="col-md-3">
@@ -1200,6 +1234,8 @@ $result = $student->getAllStudents();
 
                                                 <th>Date of Birth</th>
 
+                                                <th>Age</th>
+
                                                 <th>Gender</th>
 
                                                 <th>Civil Status</th>
@@ -1255,6 +1291,7 @@ $result = $student->getAllStudents();
                                                     $row['Emergency_City_Municipality'] ?? '',
                                                     $row['Emergency_Province'] ?? '',
                                                 ], fn($value) => $value !== '')));
+                                                $studentAge = Student::calculateAge((string) ($row['Date_Of_Birth'] ?? ''));
 
                                                 ?>
 
@@ -1301,6 +1338,10 @@ $result = $student->getAllStudents();
 
                                                     <td>
                                                         <?= htmlspecialchars((string) ($row['Date_Of_Birth'] ?? '')); ?>
+                                                    </td>
+
+                                                    <td>
+                                                        <?= $studentAge === null ? '' : htmlspecialchars((string) $studentAge); ?>
                                                     </td>
 
                                                     <td>
@@ -1531,6 +1572,24 @@ $result = $student->getAllStudents();
 
                     <div class="form-group">
 
+                        <label>Date of Birth</label>
+
+                        <input type="text" class="form-control" id="view_dateofbirth" readonly>
+
+                    </div>
+
+
+                    <div class="form-group">
+
+                        <label>Age</label>
+
+                        <input type="text" class="form-control" id="view_age" readonly>
+
+                    </div>
+
+
+                    <div class="form-group">
+
                         <label>Course</label>
 
                         <input type="text" class="form-control" id="view_course" readonly>
@@ -1681,7 +1740,11 @@ $result = $student->getAllStudents();
                             </div>
                             <div class="form-group col-md-3">
                                 <label>Date of Birth</label>
-                                <input type="date" class="form-control" name="date_of_birth" data-student-field="Date_Of_Birth">
+                                <input type="date" class="form-control" name="date_of_birth" data-student-field="Date_Of_Birth" max="<?= date('Y-m-d', strtotime('-18 years')) ?>" required>
+                            </div>
+                            <div class="form-group col-md-3">
+                                <label>Age</label>
+                                <input type="text" class="form-control" id="manage_student_age" readonly>
                             </div>
                             <div class="form-group col-md-3">
                                 <label>Gender</label>
@@ -1747,7 +1810,12 @@ $result = $student->getAllStudents();
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Year Level <span class="text-danger">*</span></label>
-                                <input class="form-control" name="year_level" data-student-field="Year_Level" required>
+                                <select class="form-control" name="year_level" data-student-field="Year_Level" required>
+                                    <option value="">Select Year Level</option>
+                                    <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
+                                        <option value="<?= $yearLevelOption ?>">Year <?= $yearLevelOption ?></option>
+                                    <?php endfor; ?>
+                                </select>
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Academic Year</label>
@@ -1817,7 +1885,7 @@ $result = $student->getAllStudents();
                             </div>
                         </div>
                         <p class="small text-muted">Emergency contact details are optional. Save an empty form to clear this category.</p>
-                        <button type="submit" class="btn btn-success"><i class="fas fa-save mr-1"></i>Save Emergency Information</button>
+                        <button type="submit" class="btn btn-success"><i class="fas fa-save mr-1"></i>Save Emergency Contact Information</button>
                     </form>
                 </div>
                 <div class="modal-footer">
@@ -1886,7 +1954,13 @@ $result = $student->getAllStudents();
 
                 pageLength: 10,
 
-                dom: 't<"bottom"ip>'
+                order: [[0, 'desc']],
+
+                lengthChange: true,
+
+                lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+
+                dom: '<"top"l>t<"bottom"ip>'
 
             });
 
@@ -1919,6 +1993,51 @@ $result = $student->getAllStudents();
         // View Information Modal
 
         $(document).ready(function () {
+
+            function calculateStudentAge(dateOfBirth) {
+                if (!dateOfBirth) {
+                    return null;
+                }
+
+                const parts = dateOfBirth.split('-').map(Number);
+                const birthDate = new Date(parts[0], parts[1] - 1, parts[2]);
+                if (parts.length !== 3 || birthDate.getFullYear() !== parts[0] ||
+                    birthDate.getMonth() !== parts[1] - 1 || birthDate.getDate() !== parts[2]) {
+                    return null;
+                }
+
+                const today = new Date();
+                let age = today.getFullYear() - birthDate.getFullYear();
+                if (today.getMonth() < birthDate.getMonth() ||
+                    (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())) {
+                    age -= 1;
+                }
+
+                return age >= 0 ? age : null;
+            }
+
+            function updateStudentAge(dateInput, ageInput) {
+                const age = calculateStudentAge(dateInput.value);
+                ageInput.value = age === null ? '' : age;
+                dateInput.setCustomValidity(age === null || age < 18
+                    ? 'Students must be at least 18 years old.'
+                    : '');
+            }
+
+            const ageFieldPairs = [
+                [document.getElementById('add_date_of_birth'), document.getElementById('add_student_age')],
+                [document.querySelector('#viewModal [data-student-field="Date_Of_Birth"]'), document.getElementById('manage_student_age')]
+            ];
+            ageFieldPairs.forEach(function (fields) {
+                const dateInput = fields[0];
+                const ageInput = fields[1];
+                if (dateInput && ageInput) {
+                    dateInput.addEventListener('input', function () {
+                        updateStudentAge(dateInput, ageInput);
+                    });
+                    updateStudentAge(dateInput, ageInput);
+                }
+            });
 
             function setEditOriginals(modalSelector, fieldSelectors, buttonSelector) {
                 const modal = $(modalSelector);
@@ -1974,6 +2093,10 @@ $result = $student->getAllStudents();
                     const field = this.dataset.studentField;
                     $(this).val(student[field] == null ? '' : student[field]);
                 });
+                updateStudentAge(
+                    document.querySelector('#viewModal [data-student-field="Date_Of_Birth"]'),
+                    document.getElementById('manage_student_age')
+                );
                 $('#viewModal .student-form-tab[data-category-tab="personal"]').trigger('click');
             });
 
@@ -2008,6 +2131,11 @@ $result = $student->getAllStudents();
                 $('#view_email').val(
                     $(this).data('email')
                 );
+
+                const dateOfBirth = $(this).data('dateofbirth') || '';
+                $('#view_dateofbirth').val(dateOfBirth);
+                const age = calculateStudentAge(dateOfBirth);
+                $('#view_age').val(age === null ? '' : age);
 
             });
 
@@ -2323,6 +2451,9 @@ $result = $student->getAllStudents();
                 let message = '';
                 if (!/^\d{10}$/.test(studentNumber)) {
                     message = 'Student number must contain exactly 10 digits.';
+                } else if (calculateStudentAge($('#add_date_of_birth').val()) === null ||
+                    calculateStudentAge($('#add_date_of_birth').val()) < 18) {
+                    message = 'Students must be at least 18 years old. Enter a valid date of birth.';
                 } else if (!validName.test(firstName) || !validName.test(lastName) ||
                     (middleName !== '' && !validName.test(middleName))) {
                     message = 'Names may contain letters, spaces, apostrophes, periods, and hyphens only.';
