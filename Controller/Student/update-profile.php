@@ -3,6 +3,8 @@
 require_once __DIR__ . '/../../config/auth.php';
 requireStudentLogin();
 require_once __DIR__ . '/../../models/studentquery.php';
+require_once __DIR__ . '/../../models/Semester.php';
+require_once __DIR__ . '/../../models/Section.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isValidCsrfToken($_POST['csrf_token'] ?? null)) {
     header('Location: ../../student.php?status=error');
@@ -23,9 +25,14 @@ $cityMunicipality = trim($_POST['city_municipality'] ?? '');
 $province = trim($_POST['province'] ?? '');
 $contactNumber = trim($_POST['contact_number'] ?? '');
 $nationality = trim($_POST['nationality'] ?? '');
+$nationalityOptions = require __DIR__ . '/../../config/nationalities.php';
 $programCourse = trim($_POST['program_course'] ?? '');
 $yearLevel = trim($_POST['year_level'] ?? '');
 $academicYear = trim($_POST['academic_year'] ?? '');
+$semesterIdValue = trim($_POST['semester_id'] ?? '');
+$semesterId = $semesterIdValue !== '' && ctype_digit($semesterIdValue) ? (int) $semesterIdValue : null;
+$sectionIdValue = trim($_POST['section_id'] ?? '');
+$sectionId = $sectionIdValue !== '' && ctype_digit($sectionIdValue) ? (int) $sectionIdValue : null;
 $department = trim($_POST['department'] ?? '');
 $currentGpa = trim($_POST['current_gpa'] ?? '');
 $emergencyFirstName = trim($_POST['emergency_first_name'] ?? '');
@@ -46,7 +53,11 @@ if (
     ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
     !preg_match($namePattern, $lastName) ||
     !filter_var($email, FILTER_VALIDATE_EMAIL) ||
+    ($nationality !== '' && !in_array($nationality, $nationalityOptions, true)) ||
+    !in_array($gender, ['Female', 'Male'], true) ||
     ($yearLevel !== '' && !in_array($yearLevel, ['1', '2', '3', '4', '5'], true)) ||
+    ($semesterIdValue !== '' && $semesterId === null) ||
+    ($sectionIdValue !== '' && ($sectionId === null || $sectionId <= 0)) ||
     ($emergencyFirstName !== '' && !preg_match($namePattern, $emergencyFirstName)) ||
     ($emergencyMiddleName !== '' && !preg_match($namePattern, $emergencyMiddleName)) ||
     ($emergencyLastName !== '' && !preg_match($namePattern, $emergencyLastName)) ||
@@ -55,6 +66,25 @@ if (
     header('Location: ../../student.php?status=error');
     exit;
 }
+
+$sectionMatches = $sectionId !== null
+    ? (new Section())->sectionMatchesStudent($sectionId, $programCourse, $yearLevel)
+    : true;
+if ($sectionMatches !== true) {
+    header('Location: ../../student.php?status=error');
+    exit;
+}
+
+$semesterModel = new Semester();
+$semesterRecord = null;
+if ($semesterId !== null) {
+    $semesterRecord = $semesterModel->getSemesterById($semesterId);
+    if ($semesterRecord === false || !$semesterRecord) {
+        header('Location: ../../student.php?status=error');
+        exit;
+    }
+}
+$semester = (string) ($semesterRecord['semester'] ?? '');
 
 $studentModel = new Student();
 if ($studentModel->updateStudentProfile(
@@ -76,6 +106,9 @@ if ($studentModel->updateStudentProfile(
     $programCourse,
     $yearLevel,
     $academicYear,
+    $semester,
+    $semesterId,
+    $sectionId,
     $department,
     $currentGpa,
     $emergencyFirstName,

@@ -8,6 +8,8 @@ if (isStudentUser()) {
 }
 require_once __DIR__ . '/../../models/studentquery.php';
 require_once __DIR__ . '/../../models/Programs.php';
+require_once __DIR__ . '/../../models/Semester.php';
+require_once __DIR__ . '/../../models/Section.php';
 
 function redirectCategoryStatus($status, $category = '')
 {
@@ -59,6 +61,8 @@ if ($category === 'personal' || $combinedStudentUpdate) {
     $middleName = isStudentUser() ? (string) ($student['Middle_Name'] ?? '') : $value('middle_name');
     $lastName = isStudentUser() ? (string) $student['Last_Name'] : $value('last_name');
     $email = $value('email');
+    $nationality = $value('nationality');
+    $nationalityOptions = require __DIR__ . '/../../config/nationalities.php';
     $dateOfBirth = $value('date_of_birth');
     $gender = $value('gender');
     $civilStatus = $value('civil_status');
@@ -73,8 +77,11 @@ if ($category === 'personal' || $combinedStudentUpdate) {
         ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
         !preg_match($namePattern, $lastName) ||
         ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) ||
+        ($nationality !== '' &&
+            !in_array($nationality, $nationalityOptions, true) &&
+            $nationality !== (string) ($student['Nationality'] ?? '')) ||
         !$birthDate || $birthDate->format('Y-m-d') !== $dateOfBirth || $age === null || $age < 18 ||
-        !in_array($gender, ['', 'Female', 'Male', 'Non-binary', 'Prefer not to say'], true) ||
+        !in_array($gender, ['Female', 'Male'], true) ||
         !in_array($civilStatus, ['', 'Single', 'Married', 'Divorced', 'Widowed'], true)
     ) {
         redirectCategoryStatus('error', $category);
@@ -99,16 +106,36 @@ if ($category === 'personal' || $combinedStudentUpdate) {
         'Province' => $value('province'),
         'Contact_Number' => $value('contact_number'),
         'Email' => $email,
-        'Nationality' => $value('nationality'),
+        'Nationality' => $nationality,
     ];
 }
 
 if ($category === 'academic' || $combinedStudentUpdate) {
     $course = $value(isStudentUser() ? 'program_course' : 'course');
     $yearLevel = $value('year_level');
+    $sectionIdValue = $value('section_id');
+    if ($sectionIdValue !== '' && (!ctype_digit($sectionIdValue) || (int) $sectionIdValue <= 0)) {
+        redirectCategoryStatus('error', $category);
+    }
+    $sectionId = $sectionIdValue !== '' ? (int) $sectionIdValue : null;
     $schoolYear = $value(isStudentUser() ? 'academic_year' : 'school_year');
+    $semesterIdValue = $value('semester_id');
+    if ($semesterIdValue !== '' && !ctype_digit($semesterIdValue)) {
+        redirectCategoryStatus('error', $category);
+    }
+    $semesterId = $semesterIdValue !== '' ? (int) $semesterIdValue : null;
     $department = $value('department');
     $currentGpa = $value('current_gpa');
+
+    $semesterModel = new Semester();
+    $semesterRecord = null;
+    if ($semesterId !== null) {
+        $semesterRecord = $semesterModel->getSemesterById($semesterId);
+        if ($semesterRecord === false || !$semesterRecord) {
+            redirectCategoryStatus('error', $category);
+        }
+    }
+    $semester = (string) ($semesterRecord['semester'] ?? '');
 
     $programModel = new Program();
     $programs = $programModel->getAllPrograms();
@@ -119,18 +146,27 @@ if ($category === 'academic' || $combinedStudentUpdate) {
         }
     }
 
-    $academicIsEmpty = $course === '' && $yearLevel === '' && $schoolYear === '' && $department === '' && $currentGpa === '';
+    $academicIsEmpty = $course === '' && $yearLevel === '' && $schoolYear === '' && $semesterId === null && $sectionId === null && $department === '' && $currentGpa === '';
     $academicIsValid = $course !== '' &&
         in_array($yearLevel, ['1', '2', '3', '4', '5'], true) &&
         in_array($course, $validCourses, true);
     if ((!$combinedStudentUpdate && !$academicIsValid) || ($combinedStudentUpdate && !$academicIsEmpty && !$academicIsValid)) {
         redirectCategoryStatus('error', $category);
     }
+    if ($sectionId !== null) {
+        $sectionMatches = (new Section())->sectionMatchesStudent($sectionId, $course, $yearLevel);
+        if ($sectionMatches !== true) {
+            redirectCategoryStatus('error', $category);
+        }
+    }
 
     $fieldsByCategory['academic'] = [
         'Course' => $course,
         'Year_Level' => $yearLevel,
         'School_Year' => $schoolYear,
+        'Semester' => $semester,
+        'Semester_ID' => $semesterId,
+        'Section_ID' => $sectionId,
         'Department' => $department,
         'Current_GPA' => $currentGpa,
     ];

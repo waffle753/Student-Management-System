@@ -13,6 +13,15 @@ if ($id <= 0) {
 }
 
 $curriculumSubject = new CurriculumSubject();
+$hasSchedules = $curriculumSubject->curriculumSubjectHasSchedules($id);
+if ($hasSchedules === null) {
+    header("Location: {$redirect}&status=error&title=Validation+Failed&message=The+curriculum+subject+could+not+be+checked+for+class+schedules.");
+    exit;
+}
+if ($hasSchedules) {
+    header("Location: {$redirect}&status=error&title=In+Use&message=Delete+the+class+schedules+for+this+curriculum+subject+before+deleting+it.");
+    exit;
+}
 
 if ($curriculumSubject->deleteCurriculumSubject($id)) {
     header("Location: {$redirect}&status=success&title=Success&message=Curriculum+subject+deleted+successfully.");

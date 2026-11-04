@@ -67,6 +67,61 @@ if ($instructors) {
     
     </style>
 
+    <?php if (isset($_GET['status'])): ?>
+        <script>
+            const instructorAlertStatus = <?= json_encode($_GET['status'] ?? 'error') ?>;
+            const instructorAlertTitle = <?= json_encode($_GET['title'] ?? 'Operation Result') ?>;
+            const instructorAlertMessage = <?= json_encode($_GET['message'] ?? '') ?>;
+            Swal.fire({
+                title: instructorAlertTitle,
+                text: instructorAlertMessage,
+                icon: instructorAlertStatus === 'success' ? 'success' : 'error',
+                confirmButtonText: 'OK'
+            }).then(() => {
+                const url = new URL(window.location.href);
+                ['status', 'title', 'message'].forEach((key) => url.searchParams.delete(key));
+                window.history.replaceState({}, document.title, url.toString());
+            });
+        </script>
+    <?php endif; ?>
+
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white">
+            <h3 class="card-title"><i class="fas fa-user-plus mr-2"></i>Add Instructor</h3>
+        </div>
+        <form method="POST" action="Controller/Instructor/create.php">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="add_instructor_employee_id">Employee ID</label>
+                            <input type="text" name="Employee_ID" id="add_instructor_employee_id" class="form-control"
+                                inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Enter 6-digit employee ID" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="add_instructor_firstname">First Name</label>
+                            <input type="text" name="firstname" id="add_instructor_firstname" class="form-control"
+                                maxlength="100" placeholder="Enter first name" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label for="add_instructor_lastname">Last Name</label>
+                            <input type="text" name="lastname" id="add_instructor_lastname" class="form-control"
+                                maxlength="100" placeholder="Enter last name" required>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save mr-1"></i>Save Instructor</button>
+                <button type="reset" class="btn btn-secondary">Clear</button>
+            </div>
+        </form>
+    </div>
+
     <!-- ============================================================
          INSTRUCTOR RECORDS
     ============================================================ -->
@@ -689,4 +744,3 @@ if ($instructors) {
 
 
 </div>
-

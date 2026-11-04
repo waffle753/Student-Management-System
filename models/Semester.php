@@ -144,6 +144,28 @@ class Semester
     // Delete semester permanently
     public function deleteSemester($id)
     {
+        $referenceCheck = $this->conn->prepare(
+            "SELECT ID FROM information WHERE Semester_ID = ?
+             UNION
+             SELECT id FROM curriculum_subjects WHERE semester_id = ?
+             LIMIT 1"
+        );
+        if (!$referenceCheck) {
+            return false;
+        }
+
+        $referenceCheck->bind_param("ii", $id, $id);
+        if (!$referenceCheck->execute()) {
+            $referenceCheck->close();
+            return false;
+        }
+
+        $isInUse = $referenceCheck->get_result()->num_rows > 0;
+        $referenceCheck->close();
+        if ($isInUse) {
+            return false;
+        }
+
         $stmt = $this->conn->prepare(
             "DELETE FROM semester WHERE ID = ?"
         );
@@ -187,6 +209,31 @@ class Semester
 
         $exists = $result->num_rows > 0;
 
+        $stmt->close();
+        return $exists;
+    }
+
+    public function semesterNameExists($semester)
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT ID
+             FROM semester
+             WHERE semester = ?
+             LIMIT 1"
+        );
+
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("s", $semester);
+
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+
+        $exists = $stmt->get_result()->num_rows > 0;
         $stmt->close();
 
         return $exists;

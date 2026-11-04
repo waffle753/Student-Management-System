@@ -14,6 +14,9 @@ if (isStudentUser()) {
 include "models/studentquery.php";
 include "models/School_Year.php";
 include "models/Programs.php";
+include_once "models/Semester.php";
+include_once "models/Section.php";
+$nationalityOptions = require __DIR__ . "/config/nationalities.php";
 
 $student = new Student();
 $schoolYearModel = new School_Year();
@@ -32,6 +35,23 @@ if ($programs) {
 }
 
 $page = $_GET['page'] ?? 'students';
+$semesterOptions = [];
+$sectionOptions = [];
+if ($page === 'students') {
+    $semesterModel = new Semester();
+    $semesters = $semesterModel->getAllSemesters();
+    if ($semesters) {
+        while ($semester = $semesters->fetch_assoc()) {
+            $semesterOptions[] = $semester;
+        }
+    }
+    $sectionResult = (new Section())->getAllSections();
+    if ($sectionResult) {
+        while ($sectionOption = $sectionResult->fetch_assoc()) {
+            $sectionOptions[] = $sectionOption;
+        }
+    }
+}
 
 if (isset($_POST['create_student'])) {
     $studentNumber = trim($_POST['student_no'] ?? '');
@@ -69,10 +89,46 @@ if (isset($_POST['create_student'])) {
         header("Location: index.php?invalid=1");
         exit;
     }
+    $sectionIdValue = $field('section_id');
+    $sectionId = null;
+    if ($sectionIdValue !== '') {
+        if (!ctype_digit($sectionIdValue) || (int) $sectionIdValue <= 0) {
+            header("Location: index.php?invalid=1");
+            exit;
+        }
+        $sectionId = (int) $sectionIdValue;
+        $sectionMatches = (new Section())->sectionMatchesStudent($sectionId, $field('course'), $yearLevel);
+        if ($sectionMatches !== true) {
+            header("Location: index.php?invalid=1");
+            exit;
+        }
+    }
+    $semesterId = $field('semester_id');
+    $semesterRecord = null;
+    if ($semesterId !== '') {
+        foreach ($semesterOptions as $semesterOption) {
+            if ((string) ($semesterOption['id'] ?? '') === $semesterId) {
+                $semesterRecord = $semesterOption;
+                break;
+            }
+        }
+    }
+    if ($semesterId !== '' && !$semesterRecord) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
+    $semester = (string) ($semesterRecord['semester'] ?? '');
+    $semesterId = $semesterRecord ? (int) $semesterRecord['id'] : null;
+    $nationality = $field('nationality');
+    if ($nationality !== '' && !in_array($nationality, $nationalityOptions, true)) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
 
     $dateOfBirth = $field('date_of_birth');
     $age = Student::calculateAge($dateOfBirth);
-    if ($age === null || $age < 18) {
+    $gender = $field('gender');
+    if ($age === null || $age < 18 || !in_array($gender, ['Female', 'Male'], true)) {
         header("Location: index.php?invalid=1");
         exit;
     }
@@ -94,9 +150,12 @@ if (isset($_POST['create_student'])) {
         $lastName,
         $field('course'),
         $field('school_year'),
+        $semester,
+        $semesterId,
+        $sectionId,
         $email,
         $dateOfBirth,
-        $field('gender'),
+        $gender,
         $field('civil_status'),
         $field('house_unit_no'),
         $field('street'),
@@ -104,7 +163,7 @@ if (isset($_POST['create_student'])) {
         $field('city_municipality'),
         $field('province'),
         $field('contact_number'),
-        $field('nationality'),
+        $nationality,
         $yearLevel,
         $field('department'),
         $field('current_gpa'),
@@ -689,6 +748,14 @@ $result = $student->getAllStudents();
                                 </li>
 
                                 <li class="nav-item">
+                                    <a href="index.php?page=section"
+                                        class="nav-link <?= $page === 'section' ? 'active' : '' ?>">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Section</p>
+                                    </a>
+                                </li>
+
+                                <li class="nav-item">
                                     <a href="index.php?page=role"
                                         class="nav-link <?= $page === 'role' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
@@ -764,6 +831,10 @@ $result = $student->getAllStudents();
             <?php elseif ($page === 'programs'): ?>
 
                 <?php include "view/programs.php"; ?>
+
+            <?php elseif ($page === 'section'): ?>
+
+                <?php include "view/section.php"; ?>
 
             <?php elseif ($page === 'role'): ?>
 
@@ -951,8 +1022,7 @@ $result = $student->getAllStudents();
 
                                 <div class="card-body">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
-                                    <p class="text-muted">Enter details in the appropriate category. Student number and name are in Personal Information; Academic and Emergency Contact details are optional.</p>
-
+                                    
                                     <div class="student-form-tabs" role="tablist" aria-label="Student information categories">
                                         <a href="#student-personal" class="student-form-tab active" data-target="student-personal" role="tab" aria-selected="true">Personal Information</a>
                                         <a href="#student-academic" class="student-form-tab" data-target="student-academic" role="tab" aria-selected="false">Academic Information</a>
@@ -997,13 +1067,11 @@ $result = $student->getAllStudents();
                                             </div>
 
                                             <div class="col-md-3">
-                                                <label>Gender</label>
-                                                <select name="gender" class="form-control">
+                                                <label>Gender <span class="text-danger">*</span></label>
+                                                <select name="gender" class="form-control" required>
                                                     <option value="">Select Gender</option>
                                                     <option value="Female">Female</option>
                                                     <option value="Male">Male</option>
-                                                    <option value="Non-binary">Non-binary</option>
-                                                    <option value="Prefer not to say">Prefer not to say</option>
                                                 </select>
                                             </div>
 
@@ -1020,7 +1088,12 @@ $result = $student->getAllStudents();
 
                                             <div class="col-md-3">
                                                 <label>Nationality</label>
-                                                <input type="text" name="nationality" class="form-control" placeholder="Enter Nationality">
+                                                <select name="nationality" class="form-control">
+                                                    <option value="">Select Nationality</option>
+                                                    <?php foreach ($nationalityOptions as $nationalityOption): ?>
+                                                        <option value="<?= htmlspecialchars($nationalityOption) ?>"><?= htmlspecialchars($nationalityOption) ?></option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
 
                                             <div class="col-md-3">
@@ -1064,7 +1137,7 @@ $result = $student->getAllStudents();
                                         <div class="row">
                                             <div class="col-md-3">
                                                 <label>Program / Course</label>
-                                                <select name="course" class="form-control">
+                                                <select name="course" class="form-control" data-section-program>
                                                     <option value="">Select Course</option>
                                                     <?php foreach ($courseOptions as $courseOption): ?>
                                                         <option value="<?= htmlspecialchars($courseOption['name']) ?>">
@@ -1076,11 +1149,25 @@ $result = $student->getAllStudents();
 
                                             <div class="col-md-3">
                                                 <label>Year Level</label>
-                                                <select name="year_level" class="form-control">
+                                                <select name="year_level" class="form-control" data-section-year>
                                                     <option value="">Select Year Level</option>
                                                     <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
-                                                        <option value="<?= $yearLevelOption ?>">Year <?= $yearLevelOption ?></option>
+                                                        <option value="<?= $yearLevelOption ?>"><?= $yearLevelOption ?><?= $yearLevelOption === 1 ? 'st' : ($yearLevelOption === 2 ? 'nd' : ($yearLevelOption === 3 ? 'rd' : 'th')) ?> year</option>
                                                     <?php endfor; ?>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-md-3">
+                                                <label>Section</label>
+                                                <select name="section_id" class="form-control" data-section-select>
+                                                    <option value="">Select Section</option>
+                                                    <?php foreach ($sectionOptions as $sectionOption): ?>
+                                                        <option value="<?= htmlspecialchars((string) $sectionOption['section_id']) ?>"
+                                                            data-program="<?= htmlspecialchars((string) $sectionOption['CourseName'], ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-year-level="<?= htmlspecialchars((string) $sectionOption['year_level'], ENT_QUOTES, 'UTF-8') ?>">
+                                                            <?= htmlspecialchars((string) $sectionOption['section_name']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
                                                 </select>
                                             </div>
 
@@ -1095,6 +1182,18 @@ $result = $student->getAllStudents();
                                                             <option value="<?= htmlspecialchars($year) ?>"><?= htmlspecialchars($year) ?></option>
                                                         <?php endforeach; ?>
                                                     <?php endif; ?>
+                                                </select>
+                                            </div>
+
+                                            <div class="col-md-3">
+                                                <label>Semester</label>
+                                                <select name="semester_id" class="form-control">
+                                                    <option value="">Select Semester</option>
+                                                    <?php foreach ($semesterOptions as $semesterOption): ?>
+                                                        <option value="<?= htmlspecialchars((string) ($semesterOption['id'] ?? '')) ?>">
+                                                            <?= htmlspecialchars((string) ($semesterOption['semester'] ?? '')) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
                                                 </select>
                                             </div>
 
@@ -1432,6 +1531,10 @@ $result = $student->getAllStudents();
                                                                 data-lname="<?= htmlspecialchars($row['Last_Name']); ?>"
                                                                 data-course="<?= htmlspecialchars($row['Course']); ?>"
                                                                 data-schoolyear="<?= htmlspecialchars($row['School_Year']); ?>"
+                                                                data-load-yearlevel="<?= htmlspecialchars((string) ($row['Year_Level'] ?? '')); ?>"
+                                                                data-load-semester="<?= htmlspecialchars((string) ($row['Semester'] ?? '')); ?>"
+                                                                data-load-semesterid="<?= htmlspecialchars((string) ($row['Semester_ID'] ?? '')); ?>"
+                                                                data-load-sectionid="<?= htmlspecialchars((string) ($row['Section_ID'] ?? '')); ?>"
                                                                 data-email="<?= htmlspecialchars($row['Email']); ?>"
                                                                 data-dateofbirth="<?= htmlspecialchars((string) ($row['Date_Of_Birth'] ?? '')); ?>"
                                                                 data-gender="<?= htmlspecialchars((string) ($row['Gender'] ?? '')); ?>"
@@ -1666,6 +1769,7 @@ $result = $student->getAllStudents();
                                     <th>Subject Code</th>
                                     <th>Subject</th>
                                     <th>Units</th>
+                                    <th>Section</th>
                                     <th>Time</th>
                                     <th>Days</th>
                                     <th>Room</th>
@@ -1673,13 +1777,13 @@ $result = $student->getAllStudents();
                                 </tr>
                             </thead>
                             <tbody id="studentLoadBody">
-                                <tr><td colspan="7" class="text-center text-muted">Select View Load to load the student's subjects.</td></tr>
+                                <tr><td colspan="8" class="text-center text-muted">Select View Load to load the student's subjects.</td></tr>
                             </tbody>
                             <tfoot>
                                 <tr>
                                     <td colspan="2" id="studentLoadDate" class="text-right font-weight-bold">Total Units:</td>
                                     <td id="studentLoadTotal" class="font-weight-bold">0</td>
-                                    <td colspan="4"></td>
+                                    <td colspan="5"></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1747,9 +1851,9 @@ $result = $student->getAllStudents();
                                 <input type="text" class="form-control" id="manage_student_age" readonly>
                             </div>
                             <div class="form-group col-md-3">
-                                <label>Gender</label>
-                                <select class="form-control" name="gender" data-student-field="Gender">
-                                    <option value="">Select Gender</option><option>Female</option><option>Male</option><option>Non-binary</option><option>Prefer not to say</option>
+                                <label>Gender <span class="text-danger">*</span></label>
+                                <select class="form-control" name="gender" data-student-field="Gender" required>
+                                    <option value="">Select Gender</option><option>Female</option><option>Male</option>
                                 </select>
                             </div>
                             <div class="form-group col-md-3">
@@ -1768,7 +1872,12 @@ $result = $student->getAllStudents();
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Nationality</label>
-                                <input class="form-control" name="nationality" data-student-field="Nationality">
+                                <select class="form-control" name="nationality" data-student-field="Nationality">
+                                    <option value="">Select Nationality</option>
+                                    <?php foreach ($nationalityOptions as $nationalityOption): ?>
+                                        <option value="<?= htmlspecialchars($nationalityOption) ?>"><?= htmlspecialchars($nationalityOption) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
                             <div class="form-group col-md-4">
                                 <label>House / Unit No.</label>
@@ -1801,7 +1910,7 @@ $result = $student->getAllStudents();
                         <div class="row">
                             <div class="form-group col-md-4">
                                 <label>Program / Course <span class="text-danger">*</span></label>
-                                <select class="form-control" name="course" data-student-field="Course" required>
+                                <select class="form-control" name="course" data-student-field="Course" data-section-program required>
                                     <option value="">Select Course</option>
                                     <?php foreach ($courseOptions as $courseOption): ?>
                                         <option value="<?= htmlspecialchars($courseOption['name']) ?>"><?= htmlspecialchars($courseOption['code'] . ' - ' . $courseOption['name']) ?></option>
@@ -1810,11 +1919,24 @@ $result = $student->getAllStudents();
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Year Level <span class="text-danger">*</span></label>
-                                <select class="form-control" name="year_level" data-student-field="Year_Level" required>
+                                <select class="form-control" name="year_level" data-student-field="Year_Level" data-section-year required>
                                     <option value="">Select Year Level</option>
                                     <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
-                                        <option value="<?= $yearLevelOption ?>">Year <?= $yearLevelOption ?></option>
+                                        <option value="<?= $yearLevelOption ?>"><?= $yearLevelOption ?><?= $yearLevelOption === 1 ? 'st' : ($yearLevelOption === 2 ? 'nd' : ($yearLevelOption === 3 ? 'rd' : 'th')) ?> year</option>
                                     <?php endfor; ?>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Section</label>
+                                <select class="form-control" name="section_id" data-student-field="Section_ID" data-section-select>
+                                    <option value="">Select Section</option>
+                                    <?php foreach ($sectionOptions as $sectionOption): ?>
+                                        <option value="<?= htmlspecialchars((string) $sectionOption['section_id']) ?>"
+                                            data-program="<?= htmlspecialchars((string) $sectionOption['CourseName'], ENT_QUOTES, 'UTF-8') ?>"
+                                            data-year-level="<?= htmlspecialchars((string) $sectionOption['year_level'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <?= htmlspecialchars((string) $sectionOption['section_name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
                                 </select>
                             </div>
                             <div class="form-group col-md-4">
@@ -1823,6 +1945,17 @@ $result = $student->getAllStudents();
                                     <option value="">Not specified</option>
                                     <?php foreach ($schoolYearOptions as $year): ?>
                                         <option value="<?= htmlspecialchars($year) ?>"><?= htmlspecialchars($year) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="form-group col-md-4">
+                                <label>Semester</label>
+                                <select class="form-control" name="semester_id" data-student-field="Semester_ID">
+                                    <option value="">Not specified</option>
+                                    <?php foreach ($semesterOptions as $semesterOption): ?>
+                                        <option value="<?= htmlspecialchars((string) ($semesterOption['id'] ?? '')) ?>">
+                                            <?= htmlspecialchars((string) ($semesterOption['semester'] ?? '')) ?>
+                                        </option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
@@ -1923,6 +2056,37 @@ $result = $student->getAllStudents();
     <script>
 
         $(document).ready(function () {
+
+            function updateSectionOptions(container) {
+                const program = container.querySelector('[data-section-program]');
+                const yearLevel = container.querySelector('[data-section-year]');
+                const section = container.querySelector('[data-section-select]');
+                if (!program || !yearLevel || !section) {
+                    return;
+                }
+
+                Array.from(section.options).forEach((option) => {
+                    if (!option.dataset.program) {
+                        option.hidden = false;
+                        return;
+                    }
+                    option.hidden = (program.value !== '' && option.dataset.program !== program.value) ||
+                        (yearLevel.value !== '' && option.dataset.yearLevel !== yearLevel.value);
+                });
+                if (section.selectedOptions.length && section.selectedOptions[0].hidden) {
+                    section.value = '';
+                }
+            }
+
+            const studentSectionForms = [
+                document.querySelector('.student-entry-card'),
+                document.getElementById('academicCategoryForm')
+            ].filter(Boolean);
+            studentSectionForms.forEach((form) => {
+                form.querySelector('[data-section-program]').addEventListener('change', () => updateSectionOptions(form));
+                form.querySelector('[data-section-year]').addEventListener('change', () => updateSectionOptions(form));
+                updateSectionOptions(form);
+            });
 
             $('.student-entry-card .student-form-tab[data-target]').on('click', function (event) {
                 event.preventDefault();
@@ -2091,8 +2255,14 @@ $result = $student->getAllStudents();
                 $('.category-student-id').val(student.ID);
                 $('#viewModal [data-student-field]').each(function () {
                     const field = this.dataset.studentField;
-                    $(this).val(student[field] == null ? '' : student[field]);
+                    const value = student[field] == null ? '' : String(student[field]);
+                    if (this.tagName === 'SELECT' && value !== '' &&
+                        !Array.from(this.options).some(function (option) { return option.value === value; })) {
+                        this.add(new Option(value, value));
+                    }
+                    $(this).val(value);
                 });
+                updateSectionOptions(document.getElementById('academicCategoryForm'));
                 updateStudentAge(
                     document.querySelector('#viewModal [data-student-field="Date_Of_Birth"]'),
                     document.getElementById('manage_student_age')
@@ -2103,6 +2273,10 @@ $result = $student->getAllStudents();
             $('.infoBtn').click(function () {
 
                 $('#viewStudentLoadBtn').data('course', $(this).data('course'));
+                $('#viewStudentLoadBtn').data('year-level', $(this).attr('data-load-yearlevel') || '');
+                $('#viewStudentLoadBtn').data('semester', $(this).attr('data-load-semester') || '');
+                $('#viewStudentLoadBtn').data('semester-id', $(this).attr('data-load-semesterid') || '');
+                $('#viewStudentLoadBtn').data('section-id', $(this).attr('data-load-sectionid') || '');
 
                 $('#view_studentno').val(
                     $(this).data('studentno')
@@ -2141,13 +2315,17 @@ $result = $student->getAllStudents();
 
             $('#viewStudentLoadBtn').click(function () {
                 const studentCourse = $(this).data('course');
+                const studentYearLevel = $(this).data('year-level') || '';
+                const studentSemester = $(this).data('semester') || '';
+                const studentSemesterId = $(this).data('semester-id') || '';
+                const studentSectionId = $(this).data('section-id') || '';
                 $('#infoModal').modal('hide');
                 $('#studentLoadModal').modal('show');
-                $('#studentLoadBody').html('<tr><td colspan="7" class="text-center text-muted">Loading student load...</td></tr>');
+                $('#studentLoadBody').html('<tr><td colspan="8" class="text-center text-muted">Loading student load...</td></tr>');
                 $('#studentLoadTotal').text('0');
                 $('#studentLoadDate').text('Total Units:');
 
-                fetch(`Controller/Student/load.php?course=${encodeURIComponent(studentCourse)}`)
+                fetch(`Controller/Student/load.php?course=${encodeURIComponent(studentCourse)}&year_level=${encodeURIComponent(studentYearLevel)}&semester=${encodeURIComponent(studentSemester)}&semester_id=${encodeURIComponent(studentSemesterId)}&section_id=${encodeURIComponent(studentSectionId)}`)
                     .then((response) => response.json())
                     .then((load) => {
                         if (load.error) {
@@ -2155,7 +2333,7 @@ $result = $student->getAllStudents();
                         }
 
                         if (!load.subjects || load.subjects.length === 0) {
-                            $('#studentLoadBody').html('<tr><td colspan="7" class="text-center text-muted">No curriculum subjects found for this program.</td></tr>');
+                            $('#studentLoadBody').html('<tr><td colspan="8" class="text-center text-muted">No class schedules are available for this student assigned section, program, year, and semester.</td></tr>');
                         } else {
                             const rows = load.subjects.map((subject) => {
                                 const time = subject.time_start && subject.time_end
@@ -2166,6 +2344,7 @@ $result = $student->getAllStudents();
                                     <td>${escapeHtml(subject.SubjectCode)}</td>
                                     <td>${escapeHtml(subject.SubjectName)}</td>
                                     <td>${escapeHtml(subject.Unit)}</td>
+                                    <td>${escapeHtml(subject.section || 'TBA')}</td>
                                     <td>${escapeHtml(time)}</td>
                                     <td>${escapeHtml(days)}</td>
                                     <td>${escapeHtml(subject.room)}</td>
@@ -2177,8 +2356,8 @@ $result = $student->getAllStudents();
 
                         $('#studentLoadTotal').text(load.total_units || 0);
                     })
-                    .catch(() => {
-                        $('#studentLoadBody').html('<tr><td colspan="7" class="text-center text-danger">Unable to load the student subjects.</td></tr>');
+                    .catch((error) => {
+                        $('#studentLoadBody').html(`<tr><td colspan="8" class="text-center text-danger">${escapeHtml(error.message || 'Unable to load the student schedules.')}</td></tr>`);
                     });
             });
 
@@ -2446,6 +2625,8 @@ $result = $student->getAllStudents();
                 const firstName = $('#add_fname').val().trim();
                 const middleName = $('#add_mname').val().trim();
                 const lastName = $('#add_lname').val().trim();
+                const emailInput = this.querySelector('input[name="email"]');
+                const emergencyEmailInput = this.querySelector('input[name="emergency_email"]');
                 const validName = /^[\p{L}.'\-\s]+$/u;
 
                 let message = '';
@@ -2457,6 +2638,9 @@ $result = $student->getAllStudents();
                 } else if (!validName.test(firstName) || !validName.test(lastName) ||
                     (middleName !== '' && !validName.test(middleName))) {
                     message = 'Names may contain letters, spaces, apostrophes, periods, and hyphens only.';
+                } else if ((emailInput.value.trim() !== '' && !emailInput.checkValidity()) ||
+                    (emergencyEmailInput.value.trim() !== '' && !emergencyEmailInput.checkValidity())) {
+                    message = 'Enter a valid email address.';
                 }
 
                 if (message !== '') {

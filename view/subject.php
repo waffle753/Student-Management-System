@@ -54,7 +54,7 @@ if ($subjects) {
 </style>
 
 <div class="container-fluid">
-    <h2 class="mb-4">Subject Management</h2>
+    <h2 class="mb-2">Subject Management</h2>
 
     <?php if (isset($_GET['status'])): ?>
         <script>

@@ -7,8 +7,18 @@ include_once __DIR__ . "/../config/pagination.php";
 
 $user = new User();
 
-$users = $user->getAllUsers();
-$roles = $user->getRoles();
+$roleFilterInput = $_GET['role_filter'] ?? '';
+$roleFilterId = is_string($roleFilterInput) && ctype_digit($roleFilterInput) && (int) $roleFilterInput > 0
+    ? (int) $roleFilterInput
+    : null;
+$users = $user->getAllUsers($roleFilterId);
+$roleResult = $user->getRoles();
+$roles = [];
+if ($roleResult) {
+    while ($role = $roleResult->fetch_assoc()) {
+        $roles[] = $role;
+    }
+}
 $studentResult = $user->getStudentOptions();
 $studentOptions = [];
 if ($studentResult) {
@@ -242,17 +252,13 @@ if ($users) {
                                 </option>
 
 
-                                <?php if ($roles): ?>
-
-                                    <?php while ($role = $roles->fetch_assoc()): ?>
+                                <?php foreach ($roles as $role): ?>
 
                                         <option value="<?= htmlspecialchars($role['id']) ?>" data-role-name="<?= htmlspecialchars($role['rolename'], ENT_QUOTES) ?>">
                                             <?= htmlspecialchars($role['rolename']) ?>
                                         </option>
 
-                                    <?php endwhile; ?>
-
-                                <?php endif; ?>
+                                <?php endforeach; ?>
 
                             </select>
 
@@ -322,6 +328,24 @@ if ($users) {
 
 
         <div class="card-body">
+
+            <form method="GET" action="index.php" class="form-inline mb-3">
+                <input type="hidden" name="page" value="user">
+                <label for="user_role_filter" class="mr-2">Filter by role</label>
+                <select name="role_filter" id="user_role_filter" class="form-control mr-2">
+                    <option value="">All roles</option>
+                    <?php foreach ($roles as $role): ?>
+                        <option value="<?= htmlspecialchars($role['id']) ?>"
+                            <?= $roleFilterId === (int) $role['id'] ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($role['rolename']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <button type="submit" class="btn btn-primary mr-2">Filter</button>
+                <?php if ($roleFilterId !== null): ?>
+                    <a href="index.php?page=user" class="btn btn-secondary">Clear</a>
+                <?php endif; ?>
+            </form>
 
             <!-- ================================================= -->
             <!-- TABLE -->
@@ -665,31 +689,13 @@ if ($users) {
                             </option>
 
 
-                            <?php
-
-                            $editRoles =
-                                $user->getRoles();
-
-                            if ($editRoles):
-
-                                while (
-                                    $role =
-                                    $editRoles->fetch_assoc()
-                                ):
-
-                                    ?>
+                            <?php foreach ($roles as $role): ?>
 
                                     <option value="<?= htmlspecialchars($role['id']) ?>" data-role-name="<?= htmlspecialchars($role['rolename'], ENT_QUOTES) ?>">
                                         <?= htmlspecialchars($role['rolename']) ?>
                                     </option>
 
-                                    <?php
-
-                                endwhile;
-
-                            endif;
-
-                            ?>
+                            <?php endforeach; ?>
 
                         </select>
 

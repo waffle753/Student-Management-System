@@ -30,14 +30,27 @@ class Student
     // Display all students
     public function getAllStudents()
     {
-        $sql = "SELECT * FROM information WHERE Active = 0 ORDER BY ID DESC";
+        $sql = "SELECT info.*, COALESCE(sem.semester, info.Semester) AS Semester_Name,
+                       section_record.section_name AS Section_Name
+                FROM information info
+                LEFT JOIN semester sem ON sem.ID = info.Semester_ID
+                LEFT JOIN sections section_record ON section_record.section_id = info.Section_ID
+                WHERE info.Active = 0
+                ORDER BY info.ID DESC";
         return $this->conn->query($sql);
     }
 
     // Get one student
     public function getStudentById($id)
     {
-        $stmt = $this->conn->prepare("SELECT * FROM information WHERE ID = ? AND Active = 0");
+        $stmt = $this->conn->prepare(
+            "SELECT info.*, COALESCE(sem.semester, info.Semester) AS Semester_Name,
+                    section_record.section_name AS Section_Name
+             FROM information info
+             LEFT JOIN semester sem ON sem.ID = info.Semester_ID
+             LEFT JOIN sections section_record ON section_record.section_id = info.Section_ID
+             WHERE info.ID = ? AND info.Active = 0"
+        );
         $stmt->bind_param("i", $id);
         $stmt->execute();
 
@@ -87,6 +100,9 @@ class Student
                 'Course' => 'Course',
                 'Year_Level' => 'Year_Level',
                 'School_Year' => 'School_Year',
+                'Semester' => 'Semester',
+                'Semester_ID' => 'Semester_ID',
+                'Section_ID' => 'Section_ID',
                 'Department' => 'Department',
                 'Current_GPA' => 'Current_GPA',
             ],
@@ -143,6 +159,9 @@ class Student
         $lname,
         $course,
         $school_year,
+        $semester,
+        $semesterId,
+        $sectionId,
         $email,
         $dateOfBirth,
         $gender,
@@ -178,6 +197,9 @@ class Student
                     Last_Name,
                     Course,
                     School_Year,
+                    Semester,
+                    Semester_ID,
+                    Section_ID,
                     Email,
                     Date_Of_Birth,
                     Gender,
@@ -206,7 +228,7 @@ class Student
                 )
                 VALUES
                 (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0
                 )";
 
         $stmt = $this->conn->prepare($sql);
@@ -221,6 +243,9 @@ class Student
             $lname,
             $course,
             $school_year,
+            $semester,
+            $semesterId,
+            $sectionId,
             $email,
             $dateOfBirth,
             $gender,
@@ -246,7 +271,8 @@ class Student
             $emergencyProvince,
             $emergencyEmail,
         ];
-        $stmt->bind_param(str_repeat('s', count($values)), ...$values);
+        $types = str_repeat('s', 7) . 'i' . str_repeat('s', count($values) - 8);
+        $stmt->bind_param($types, ...$values);
         $success = $stmt->execute();
         $studentId = $success ? $stmt->insert_id : false;
         $stmt->close();
@@ -314,6 +340,9 @@ class Student
         $programCourse,
         $yearLevel,
         $academicYear,
+        $semester,
+        $semesterId,
+        $sectionId,
         $department,
         $currentGpa,
         $emergencyFirstName,
@@ -333,7 +362,7 @@ class Student
                  Date_Of_Birth = ?, Gender = ?, Civil_Status = ?, House_Unit_No = ?,
                  Street = ?, Barangay = ?, City_Municipality = ?, Province = ?,
                  Contact_Number = ?, Nationality = ?, Course = ?, Year_Level = ?,
-                 School_Year = ?, Department = ?, Current_GPA = ?,
+                 School_Year = ?, Semester = ?, Semester_ID = ?, Section_ID = ?, Department = ?, Current_GPA = ?,
                  Emergency_First_Name = ?, Emergency_Middle_Name = ?,
                  Emergency_Last_Name = ?, Emergency_Contact_Number = ?,
                  Emergency_House_Unit_No = ?, Emergency_Street = ?,
@@ -350,7 +379,7 @@ class Student
             $fname, $mname, $lname, $email, $dateOfBirth, $gender, $civilStatus,
             $houseUnitNo, $street, $barangay, $cityMunicipality, $province,
             $contactNumber, $nationality, $programCourse, $yearLevel,
-            $academicYear, $department, $currentGpa, $emergencyFirstName,
+            $academicYear, $semester, $semesterId, $sectionId, $department, $currentGpa, $emergencyFirstName,
             $emergencyMiddleName, $emergencyLastName, $emergencyContactNumber,
             $emergencyHouseUnitNo, $emergencyStreet, $emergencyBarangay,
             $emergencyCityMunicipality, $emergencyProvince, $emergencyEmail, $id,

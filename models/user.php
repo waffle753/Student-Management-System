@@ -18,7 +18,7 @@ class User
     // GET ALL USERS
     // =========================================================
 
-    public function getAllUsers()
+    public function getAllUsers($roleId = null)
     {
         $sql = "SELECT
                     u.id,
@@ -31,9 +31,29 @@ class User
                 FROM `user` AS u
                 LEFT JOIN `role` AS r
                     ON u.role_id = r.id
-                ORDER BY u.id DESC";
+                ";
 
-        $result = $this->conn->query($sql);
+        if ($roleId !== null) {
+            $sql .= "WHERE u.role_id = ? ";
+        }
+        $sql .= "ORDER BY u.id DESC";
+
+        if ($roleId !== null) {
+            $stmt = $this->conn->prepare($sql);
+            if (!$stmt) {
+                die("Failed to get users: " . $this->conn->error);
+            }
+            $stmt->bind_param("i", $roleId);
+            if (!$stmt->execute()) {
+                $error = $stmt->error;
+                $stmt->close();
+                die("Failed to get users: " . $error);
+            }
+            $result = $stmt->get_result();
+            $stmt->close();
+        } else {
+            $result = $this->conn->query($sql);
+        }
 
         if (!$result) {
             die("Failed to get users: " . $this->conn->error);
