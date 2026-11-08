@@ -6,6 +6,7 @@ include_once __DIR__ . "/../models/role.php";
 include_once __DIR__ . "/../config/pagination.php";
 
 $roleModel = new Role();
+$permissionOptions = Role::getPermissionOptions();
 $roles = $roleModel->getAllRoles();
 $recordsPerPage = 10;
 $currentPage = max(1, (int) ($_GET['list_page'] ?? 1));
@@ -83,20 +84,20 @@ if ($roles) {
             <h3 class="card-title"><i class="fas fa-user-shield mr-2"></i>Add New Role</h3>
         </div>
 
-        <form method="POST" action="Controller/Role/create.php">
+        <form method="POST" action="Controller/Role/create.php" id="roleCreateForm">
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-12">
                         <div class="form-group">
-                            <label>Role Name</label>
-                            <input type="text" name="rolename" class="form-control" placeholder="Enter Role Name" required>
+                            <label for="new_role_name">Role Name</label>
+                            <input type="text" id="new_role_name" name="rolename" class="form-control" placeholder="Enter Role Name" maxlength="100" required>
                         </div>
                     </div>
                 </div>
             </div>
 
             <div class="card-footer">
-                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Role</button>
+                <button type="button" class="btn btn-primary" id="openRolePermissions"><i class="fas fa-save"></i> Save Role</button>
                 <button type="reset" class="btn btn-secondary">Clear</button>
             </div>
         </form>
@@ -140,6 +141,7 @@ if ($roles) {
                                                     data-id="<?= htmlspecialchars($row['id']) ?>"
                                                     data-role-id="<?= htmlspecialchars($row['id']) ?>"
                                                     data-role-name="<?= htmlspecialchars($row['rolename']) ?>"
+                                                    data-permissions="<?= htmlspecialchars(json_encode($roleModel->getPermissions((int) $row['id']) ?: []), ENT_QUOTES, 'UTF-8') ?>"
                                                     title="Edit">
                                                 <i class="fas fa-edit"></i>
                                                 Edit
@@ -162,6 +164,41 @@ if ($roles) {
                 </table>
                 <?php renderPagination($currentPage, $totalPages, $offset, $recordsPerPage, $totalRecords, 'roles'); ?>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rolePermissionsModal" tabindex="-1" role="dialog" aria-labelledby="rolePermissionsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form method="POST" action="Controller/Role/create.php" id="rolePermissionsForm">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="rolePermissionsModalLabel">Choose Role Access</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
+                    <input type="hidden" name="rolename" id="permissions_role_name">
+                    <p class="text-muted">Select the pages this role is allowed to access. Leave all unchecked to grant no access.</p>
+                    <div class="row">
+                        <?php foreach ($permissionOptions as $permissionKey => $permissionLabel): ?>
+                            <div class="col-md-4">
+                                <div class="custom-control custom-checkbox mb-2">
+                                    <input type="checkbox" class="custom-control-input create-role-permission" id="create_permission_<?= htmlspecialchars($permissionKey) ?>"
+                                        name="permissions[]" value="<?= htmlspecialchars($permissionKey) ?>">
+                                    <label class="custom-control-label" for="create_permission_<?= htmlspecialchars($permissionKey) ?>">
+                                        <?= htmlspecialchars($permissionLabel) ?>
+                                    </label>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Back</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Create Role</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
@@ -204,10 +241,28 @@ if ($roles) {
                 </div>
                 <div class="modal-body">
                     <input type="hidden" name="id" id="edit_role_id">
+                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken()) ?>">
 
                     <div class="form-group">
                         <label for="edit_role_name">Role Name</label>
                         <input type="text" name="rolename" id="edit_role_name" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Allowed Pages</label>
+                        <div class="row">
+                            <?php foreach ($permissionOptions as $permissionKey => $permissionLabel): ?>
+                                <div class="col-md-4">
+                                    <div class="custom-control custom-checkbox mb-2">
+                                        <input type="checkbox" class="custom-control-input edit-role-permission"
+                                            id="edit_permission_<?= htmlspecialchars($permissionKey) ?>"
+                                            name="permissions[]" value="<?= htmlspecialchars($permissionKey) ?>">
+                                        <label class="custom-control-label" for="edit_permission_<?= htmlspecialchars($permissionKey) ?>">
+                                            <?= htmlspecialchars($permissionLabel) ?>
+                                        </label>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -217,4 +272,5 @@ if ($roles) {
             </form>
         </div>
     </div>
+
 </div>

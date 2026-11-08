@@ -419,4 +419,31 @@ class Student
 
         return $result->num_rows > 0;
     }
+
+    public function generateStudentNumber()
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT ID FROM information WHERE Student_Number = ? LIMIT 1"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $studentNumber = date('Y') . str_pad((string) random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+            $stmt->bind_param("s", $studentNumber);
+            if (!$stmt->execute()) {
+                $stmt->close();
+                return false;
+            }
+
+            if ($stmt->get_result()->num_rows === 0) {
+                $stmt->close();
+                return $studentNumber;
+            }
+        }
+
+        $stmt->close();
+        return false;
+    }
 }

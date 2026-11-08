@@ -9,13 +9,32 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-$rolename = trim($_POST['rolename'] ?? '');
+if (!isValidCsrfToken($_POST['csrf_token'] ?? null)) {
+    header("Location: ../../index.php?page=role&status=error&title=Invalid+Request&message=Refresh+the+page+and+try+again.");
+    exit;
+}
 
-if ($rolename === '') {
+$rolename = trim($_POST['rolename'] ?? '');
+$permissions = $_POST['permissions'] ?? [];
+$allowedPermissions = array_keys(Role::getPermissionOptions());
+$validPermissions = is_array($permissions);
+if ($validPermissions) {
+    foreach ($permissions as $permission) {
+        if (!is_string($permission) || !in_array($permission, $allowedPermissions, true)) {
+            $validPermissions = false;
+            break;
+        }
+    }
+}
+
+if (
+    $rolename === '' || strlen($rolename) > 100 || !$validPermissions
+) {
     header("Location: ../../index.php?page=role&status=error&title=Required+Field&message=Role+name+is+required.");
     exit;
 }
 
+$permissions = array_values(array_unique($permissions));
 $role = new Role();
 
 if ($role->roleExists($rolename)) {
@@ -23,7 +42,7 @@ if ($role->roleExists($rolename)) {
     exit;
 }
 
-if ($role->addRole($rolename)) {
+if ($role->addRole($rolename, $permissions)) {
     header("Location: ../../index.php?page=role&status=success&title=Success&message=Role+created+successfully.");
     exit;
 }

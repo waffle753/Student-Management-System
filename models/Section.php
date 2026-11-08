@@ -23,6 +23,30 @@ class Section
         );
     }
 
+    public function getSectionById($id)
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT section_id, section_name, program_id, year_level
+             FROM sections
+             WHERE section_id = ?
+             LIMIT 1"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("i", $id);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+
+        $section = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        return $section;
+    }
+
     public function sectionMatchesStudent($sectionId, $programName, $yearLevel)
     {
         $stmt = $this->conn->prepare(

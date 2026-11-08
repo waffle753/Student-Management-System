@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../models/studentquery.php';
 require_once __DIR__ . '/../../models/Programs.php';
 require_once __DIR__ . '/../../models/Semester.php';
 require_once __DIR__ . '/../../models/Section.php';
+require_once __DIR__ . '/../../models/Department.php';
 
 function redirectCategoryStatus($status, $category = '')
 {
@@ -54,9 +55,7 @@ $namePattern = "/^[A-Za-zÀ-ÖØ-öø-ÿ\\s'.-]+$/u";
 $fieldsByCategory = [];
 
 if ($category === 'personal' || $combinedStudentUpdate) {
-    $studentNumber = isStudentUser()
-        ? (string) $student['Student_Number']
-        : $value('student_no');
+    $studentNumber = (string) $student['Student_Number'];
     $firstName = isStudentUser() ? (string) $student['First_Name'] : $value('first_name');
     $middleName = isStudentUser() ? (string) ($student['Middle_Name'] ?? '') : $value('middle_name');
     $lastName = isStudentUser() ? (string) $student['Last_Name'] : $value('last_name');
@@ -72,7 +71,7 @@ if ($category === 'personal' || $combinedStudentUpdate) {
     $age = Student::calculateAge($dateOfBirth);
 
     if (
-        !preg_match('/^[0-9]{10}$/', $studentNumber) ||
+        !preg_match('/^(?:[0-9]{10}|[0-9]{12})$/', $studentNumber) ||
         !preg_match($namePattern, $firstName) ||
         ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
         !preg_match($namePattern, $lastName) ||
@@ -111,31 +110,44 @@ if ($category === 'personal' || $combinedStudentUpdate) {
 }
 
 if ($category === 'academic' || $combinedStudentUpdate) {
-    $course = $value(isStudentUser() ? 'program_course' : 'course');
-    $yearLevel = $value('year_level');
-    $sectionIdValue = $value('section_id');
-    if ($sectionIdValue !== '' && (!ctype_digit($sectionIdValue) || (int) $sectionIdValue <= 0)) {
-        redirectCategoryStatus('error', $category);
+    if (isStudentUser()) {
+        $course = (string) ($student['Course'] ?? '');
+        $yearLevel = (string) ($student['Year_Level'] ?? '');
+        $sectionId = !empty($student['Section_ID']) ? (int) $student['Section_ID'] : null;
+        $schoolYear = (string) ($student['School_Year'] ?? '');
+        $semesterId = !empty($student['Semester_ID']) ? (int) $student['Semester_ID'] : null;
+        $department = (string) ($student['Department'] ?? '');
+    } else {
+        $course = $value('course');
+        $yearLevel = $value('year_level');
+        $sectionIdValue = $value('section_id');
+        if ($sectionIdValue !== '' && (!ctype_digit($sectionIdValue) || (int) $sectionIdValue <= 0)) {
+            redirectCategoryStatus('error', $category);
+        }
+        $sectionId = $sectionIdValue !== '' ? (int) $sectionIdValue : null;
+        $schoolYear = $value('school_year');
+        $semesterIdValue = $value('semester_id');
+        if ($semesterIdValue !== '' && !ctype_digit($semesterIdValue)) {
+            redirectCategoryStatus('error', $category);
+        }
+        $semesterId = $semesterIdValue !== '' ? (int) $semesterIdValue : null;
+        $department = $value('department');
+        if ($department !== '' && !(new Department())->departmentNameExists($department)) {
+            redirectCategoryStatus('error', $category);
+        }
     }
-    $sectionId = $sectionIdValue !== '' ? (int) $sectionIdValue : null;
-    $schoolYear = $value(isStudentUser() ? 'academic_year' : 'school_year');
-    $semesterIdValue = $value('semester_id');
-    if ($semesterIdValue !== '' && !ctype_digit($semesterIdValue)) {
-        redirectCategoryStatus('error', $category);
-    }
-    $semesterId = $semesterIdValue !== '' ? (int) $semesterIdValue : null;
-    $department = $value('department');
     $currentGpa = $value('current_gpa');
 
     $semesterModel = new Semester();
+    $semester = isStudentUser() ? (string) ($student['Semester'] ?? '') : '';
     $semesterRecord = null;
     if ($semesterId !== null) {
         $semesterRecord = $semesterModel->getSemesterById($semesterId);
         if ($semesterRecord === false || !$semesterRecord) {
             redirectCategoryStatus('error', $category);
         }
+        $semester = (string) $semesterRecord['semester'];
     }
-    $semester = (string) ($semesterRecord['semester'] ?? '');
 
     $programModel = new Program();
     $programs = $programModel->getAllPrograms();

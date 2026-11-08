@@ -395,11 +395,11 @@ if (($_GET['status'] ?? '') === 'success') {
                                                 <label for="program_course">Program / course</label>
                                                 <input class="form-control" id="program_course" name="program_course" data-section-program
                                                     value="<?= htmlspecialchars($student['Course'] ?? '') ?>"
-                                                    maxlength="255">
+                                                    maxlength="255" readonly>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="year_level">Year level</label>
-                                                <select class="form-control" id="year_level" name="year_level" data-section-year required>
+                                                <select class="form-control" id="year_level" name="year_level" data-section-year required disabled>
                                                     <option value="">Select Year Level</option>
                                                     <?php for ($yearLevelOption = 1; $yearLevelOption <= 5; $yearLevelOption++): ?>
                                                         <option value="<?= $yearLevelOption ?>" <?= (string) ($student['Year_Level'] ?? '') === (string) $yearLevelOption ? 'selected' : '' ?>>
@@ -410,7 +410,7 @@ if (($_GET['status'] ?? '') === 'success') {
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="section_id">Section</label>
-                                                <select class="form-control" id="section_id" name="section_id" data-section-select>
+                                                <select class="form-control" id="section_id" name="section_id" data-section-select disabled>
                                                     <option value="">Select Section</option>
                                                     <?php foreach ($sectionOptions as $sectionOption): ?>
                                                         <option value="<?= htmlspecialchars((string) $sectionOption['section_id']) ?>"
@@ -426,11 +426,11 @@ if (($_GET['status'] ?? '') === 'success') {
                                                 <label for="academic_year">Academic year</label>
                                                 <input class="form-control" id="academic_year" name="academic_year"
                                                     value="<?= htmlspecialchars($student['School_Year'] ?? '') ?>"
-                                                    maxlength="255">
+                                                    maxlength="255" readonly>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="semester">Semester</label>
-                                                <select class="form-control" id="semester" name="semester_id">
+                                                <select class="form-control" id="semester" name="semester_id" disabled>
                                                     <option value="">Select Semester</option>
                                                     <?php foreach ($semesterOptions as $semesterOption): ?>
                                                         <?php $semesterId = (string) ($semesterOption['id'] ?? ''); ?>
@@ -444,7 +444,7 @@ if (($_GET['status'] ?? '') === 'success') {
                                                 <label for="department">Department</label>
                                                 <input class="form-control" id="department" name="department"
                                                     value="<?= htmlspecialchars($student['Department'] ?? '') ?>"
-                                                    maxlength="255">
+                                                    maxlength="255" readonly>
                                             </div>
                                             <div class="form-group col-md-3">
                                                 <label for="current_gpa">Current GPA / grade</label>
@@ -542,24 +542,36 @@ if (($_GET['status'] ?? '') === 'success') {
                             </div>
                             <div class="card-body p-0">
                                 <div class="p-3 border-bottom">
-                                    <dl class="row mb-0">
-                                        <dt class="col-sm-2">Student ID:</dt>
-                                        <dd class="col-sm-10">
-                                            <?= htmlspecialchars((string) ($student['Student_Number'] ?? '')) ?></dd>
-                                        <dt class="col-sm-2">Course:</dt>
-                                        <dd class="col-sm-10">
-                                            <?= htmlspecialchars((string) ($student['Course'] ?? 'Not specified')) ?></dd>
-                                        <dt class="col-sm-2">Year:</dt>
-                                        <dd class="col-sm-10"><?= htmlspecialchars($studentYearLevel) ?></dd>
-                                        <dt class="col-sm-2">Semester:</dt>
-                                        <dd class="col-sm-10">
-                                            <?= htmlspecialchars($semesterSummary !== '' ? $semesterSummary : 'Not specified') ?>
-                                        </dd>
-                                        <dt class="col-sm-2">Section:</dt>
-                                        <dd class="col-sm-10">
-                                            <?= htmlspecialchars((string) ($student['Section_Name'] ?? 'Not assigned')) ?>
-                                        </dd>
-                                    </dl>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-4">Student ID:</dt>
+                                                <dd class="col-sm-8">
+                                                    <?= htmlspecialchars((string) ($student['Student_Number'] ?? '')) ?></dd>
+                                                <dt class="col-sm-4">Course:</dt>
+                                                <dd class="col-sm-8">
+                                                    <?= htmlspecialchars((string) ($student['Course'] ?? 'Not specified')) ?></dd>
+                                                <dt class="col-sm-4">Year:</dt>
+                                                <dd class="col-sm-8"><?= htmlspecialchars($studentYearLevel) ?></dd>
+                                            </dl>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <dl class="row mb-0">
+                                                <dt class="col-sm-4">Semester:</dt>
+                                                <dd class="col-sm-8">
+                                                    <?= htmlspecialchars($semesterSummary !== '' ? $semesterSummary : 'Not specified') ?>
+                                                </dd>
+                                                <dt class="col-sm-4">Section:</dt>
+                                                <dd class="col-sm-8">
+                                                    <?= htmlspecialchars((string) ($student['Section_Name'] ?? 'Not assigned')) ?>
+                                                </dd>
+                                                <dt class="col-sm-4">Department:</dt>
+                                                <dd class="col-sm-8">
+                                                    <?= htmlspecialchars((string) ($student['Department'] ?? 'Not specified')) ?>
+                                                </dd>
+                                            </dl>
+                                        </div>
+                                    </div>
                                 </div>
                                 <?php if ($studentLoad === false): ?>
                                     <script>

@@ -30,6 +30,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     // Validation
     if (
         $student_no === "" ||
+        !preg_match('/^(?:[0-9]{10}|[0-9]{12})$/', $student_no) ||
         $fname === "" ||
         $lname === "" ||
         $course === "" ||

@@ -16,6 +16,7 @@ include "models/School_Year.php";
 include "models/Programs.php";
 include_once "models/Semester.php";
 include_once "models/Section.php";
+include_once "models/Department.php";
 $nationalityOptions = require __DIR__ . "/config/nationalities.php";
 
 $student = new Student();
@@ -34,9 +35,40 @@ if ($programs) {
     }
 }
 
-$page = $_GET['page'] ?? 'students';
+$knownPages = [
+    'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
+    'schoolyear', 'semester', 'subject', 'curriculum_subject', 'class_schedule',
+];
+$requestedPage = $_GET['page'] ?? 'students';
+$page = is_string($requestedPage) && in_array($requestedPage, $knownPages, true)
+    ? $requestedPage
+    : 'students';
+if (!isset($_GET['page']) && !hasRolePermission('students')) {
+    $availablePages = [
+        'user' => 'users',
+        'instructor' => 'instructors',
+        'programs' => 'programs',
+        'department' => 'departments',
+        'section' => 'sections',
+        'role' => 'roles',
+        'schoolyear' => 'school_years',
+        'semester' => 'semesters',
+        'subject' => 'subjects',
+        'curriculum_subject' => 'curriculum_subjects',
+        'class_schedule' => 'class_schedules',
+    ];
+    foreach ($availablePages as $availablePage => $permission) {
+        if (hasRolePermission($permission)) {
+            $page = $availablePage;
+            break;
+        }
+    }
+}
+requireRolePermission($page);
 $semesterOptions = [];
 $sectionOptions = [];
+$departmentOptions = [];
+$newStudentNumber = '';
 if ($page === 'students') {
     $semesterModel = new Semester();
     $semesters = $semesterModel->getAllSemesters();
@@ -51,9 +83,23 @@ if ($page === 'students') {
             $sectionOptions[] = $sectionOption;
         }
     }
+    $departmentResult = (new Department())->getAllDepartments();
+    if (!$departmentResult) {
+        die("Unable to load departments: " . $conn->error);
+    }
+    while ($departmentOption = $departmentResult->fetch_assoc()) {
+        $departmentOptions[] = $departmentOption;
+    }
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $newStudentNumber = $student->generateStudentNumber();
+        if ($newStudentNumber === false) {
+            die("Unable to generate a unique student number.");
+        }
+    }
 }
 
 if (isset($_POST['create_student'])) {
+    requireRolePermission('students');
     $studentNumber = trim($_POST['student_no'] ?? '');
     $firstName = trim($_POST['fname'] ?? '');
     $middleName = trim($_POST['mname'] ?? '');
@@ -66,7 +112,7 @@ if (isset($_POST['create_student'])) {
     }
 
     if (
-        !preg_match('/^[0-9]{10}$/', $studentNumber) ||
+        !preg_match('/^' . date('Y') . '[0-9]{8}$/', $studentNumber) ||
         !preg_match($namePattern, $firstName) ||
         ($middleName !== '' && !preg_match($namePattern, $middleName)) ||
         !preg_match($namePattern, $lastName)
@@ -86,6 +132,11 @@ if (isset($_POST['create_student'])) {
     };
     $yearLevel = $field('year_level');
     if ($yearLevel !== '' && !in_array($yearLevel, ['1', '2', '3', '4', '5'], true)) {
+        header("Location: index.php?invalid=1");
+        exit;
+    }
+    $departmentName = $field('department');
+    if ($departmentName !== '' && !(new Department())->departmentNameExists($departmentName)) {
         header("Location: index.php?invalid=1");
         exit;
     }
@@ -165,7 +216,7 @@ if (isset($_POST['create_student'])) {
         $field('contact_number'),
         $nationality,
         $yearLevel,
-        $field('department'),
+        $departmentName,
         $field('current_gpa'),
         $field('emergency_first_name'),
         $field('emergency_middle_name'),
@@ -687,7 +738,7 @@ $result = $student->getAllStudents();
 
                     <ul class="nav nav-pills nav-sidebar flex-column">
 
-                        <!-- Students -->
+                        <?php if (hasRolePermission('students')): ?>
 
                         <li class="nav-item">
 
@@ -701,9 +752,18 @@ $result = $student->getAllStudents();
 
                         </li>
 
+                        <?php endif; ?>
 
                         <!-- Administrator -->
 
+                        <?php
+                        $maintenancePermissions = [
+                            'users', 'instructors', 'programs', 'departments', 'sections', 'roles',
+                            'school_years', 'semesters', 'subjects', 'curriculum_subjects', 'class_schedules',
+                        ];
+                        $canSeeMaintenance = count(array_intersect($maintenancePermissions, getRolePermissions())) > 0;
+                        ?>
+                        <?php if ($canSeeMaintenance): ?>
                         <li class="nav-item">
 
                             <a href="#" class="nav-link" onclick="toggleAdministrator(event)">
@@ -723,89 +783,98 @@ $result = $student->getAllStudents();
 
                             <ul id="administratorMenu" class="nav nav-treeview" style="display: block;">
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('users')): ?><li class="nav-item">
                                     <a href="index.php?page=user"
                                         class="nav-link <?= $page === 'user' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>User</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('instructors')): ?><li class="nav-item">
                                     <a href="index.php?page=instructor"
                                         class="nav-link <?= $page === 'instructor' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Instructor</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('programs')): ?><li class="nav-item">
                                     <a href="index.php?page=programs"
                                         class="nav-link <?= $page === 'programs' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Programs</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('departments')): ?><li class="nav-item">
+                                    <a href="index.php?page=department"
+                                        class="nav-link <?= $page === 'department' ? 'active' : '' ?>">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Department</p>
+                                    </a>
+                                </li><?php endif; ?>
+
+                                <?php if (hasRolePermission('sections')): ?><li class="nav-item">
                                     <a href="index.php?page=section"
                                         class="nav-link <?= $page === 'section' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Section</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('roles')): ?><li class="nav-item">
                                     <a href="index.php?page=role"
                                         class="nav-link <?= $page === 'role' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Role</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('school_years')): ?><li class="nav-item">
                                     <a href="index.php?page=schoolyear"
                                         class="nav-link <?= $page === 'schoolyear' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>School Year</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('semesters')): ?><li class="nav-item">
                                     <a href="index.php?page=semester"
                                         class="nav-link <?= $page === 'semester' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Semester</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('subjects')): ?><li class="nav-item">
                                     <a href="index.php?page=subject"
                                         class="nav-link <?= $page === 'subject' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Subject</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('curriculum_subjects')): ?><li class="nav-item">
                                     <a href="index.php?page=curriculum_subject"
                                         class="nav-link <?= $page === 'curriculum_subject' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Curriculum Subject</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
-                                <li class="nav-item">
+                                <?php if (hasRolePermission('class_schedules')): ?><li class="nav-item">
                                     <a href="index.php?page=class_schedule"
                                         class="nav-link <?= $page === 'class_schedule' ? 'active' : '' ?>">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Class Schedule</p>
                                     </a>
-                                </li>
+                                </li><?php endif; ?>
 
                             </ul>
 
                         </li>
+                        <?php endif; ?>
 
                     </ul>
 
@@ -831,6 +900,10 @@ $result = $student->getAllStudents();
             <?php elseif ($page === 'programs'): ?>
 
                 <?php include "view/programs.php"; ?>
+
+            <?php elseif ($page === 'department'): ?>
+
+                <?php include "view/department.php"; ?>
 
             <?php elseif ($page === 'section'): ?>
 
@@ -1034,8 +1107,9 @@ $result = $student->getAllStudents();
                                             <div class="col-md-3">
                                                 <label for="add_student_no">Student No.</label>
                                                 <input type="text" name="student_no" id="add_student_no" class="form-control"
-                                                    maxlength="10" inputmode="numeric" pattern="[0-9]{10}" title="Enter exactly 10 digits."
-                                                    placeholder="Enter Student No." required>
+                                                    value="<?= htmlspecialchars($newStudentNumber) ?>" maxlength="12" inputmode="numeric"
+                                                    pattern="<?= date('Y') ?>[0-9]{8}" title="Student number is generated automatically."
+                                                    readonly required>
                                             </div>
 
                                             <div class="col-md-3">
@@ -1199,7 +1273,14 @@ $result = $student->getAllStudents();
 
                                             <div class="col-md-3">
                                                 <label>Department</label>
-                                                <input type="text" name="department" class="form-control" placeholder="Enter Department">
+                                                <select name="department" class="form-control">
+                                                    <option value="">Select Department</option>
+                                                    <?php foreach ($departmentOptions as $departmentOption): ?>
+                                                        <option value="<?= htmlspecialchars((string) $departmentOption['department_name']) ?>">
+                                                            <?= htmlspecialchars($departmentOption['department_name']) ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
                                             </div>
 
                                             <div class="col-md-3">
@@ -1828,7 +1909,7 @@ $result = $student->getAllStudents();
                         <div class="row">
                             <div class="form-group col-md-3">
                                 <label>Student No. <span class="text-danger">*</span></label>
-                                <input class="form-control" name="student_no" data-student-field="Student_Number" maxlength="10" inputmode="numeric" required>
+                                <input class="form-control" name="student_no" data-student-field="Student_Number" maxlength="12" inputmode="numeric" readonly required>
                             </div>
                             <div class="form-group col-md-3">
                                 <label>First Name <span class="text-danger">*</span></label>
@@ -1961,7 +2042,14 @@ $result = $student->getAllStudents();
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Department</label>
-                                <input class="form-control" name="department" data-student-field="Department">
+                                <select class="form-control" name="department" data-student-field="Department">
+                                    <option value="">Not specified</option>
+                                    <?php foreach ($departmentOptions as $departmentOption): ?>
+                                        <option value="<?= htmlspecialchars((string) $departmentOption['department_name']) ?>">
+                                            <?= htmlspecialchars($departmentOption['department_name']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
                             <div class="form-group col-md-4">
                                 <label>Current GPA / Grade</label>
@@ -2236,6 +2324,31 @@ $result = $student->getAllStudents();
             trackEditChanges('#semesterEditModal', ['#edit_semester_code', '#edit_semester_name'], '#updateSemesterBtn');
             trackEditChanges('#subjectEditModal', ['#edit_subject_code', '#edit_subject_name'], '#updateSubjectBtn');
 
+            $('#openRolePermissions').on('click', function () {
+                const roleNameInput = document.getElementById('new_role_name');
+                if (!roleNameInput || !roleNameInput.reportValidity()) {
+                    return;
+                }
+                $('#permissions_role_name').val(roleNameInput.value.trim());
+                $('#rolePermissionsModal .create-role-permission').prop('checked', false);
+                $('#rolePermissionsModal').modal('show');
+            });
+
+            $(document).on('input change', '#edit_role_name, .edit-role-permission', function () {
+                const button = $('#updateRoleBtn')[0];
+                if (!button) {
+                    return;
+                }
+                const originalValues = button.originalValues || {};
+                const originalPermissions = button.originalPermissions || [];
+                const currentPermissions = $('#roleEditModal .edit-role-permission:checked')
+                    .map(function () { return this.value; }).get().sort();
+                const permissionsChanged =
+                    JSON.stringify(currentPermissions) !== JSON.stringify(originalPermissions);
+                const nameChanged = $('#edit_role_name').val() !== originalValues['#edit_role_name'];
+                $('#updateRoleBtn').prop('disabled', !permissionsChanged && !nameChanged);
+            });
+
             function escapeHtml(value) {
                 return $('<div>').text(value == null ? '' : value).html();
             }
@@ -2371,12 +2484,12 @@ $result = $student->getAllStudents();
                 input.value = input.value.replace(/[^0-9]/g, '');
 
 
-                // Maximum 10 digits
+                // Student numbers may be legacy 10-digit values or new 12-digit values.
 
-                if (input.value.length > 10) {
+                if (input.value.length > 12) {
 
                     input.value =
-                        input.value.substring(0, 10);
+                        input.value.substring(0, 12);
 
                 }
 
@@ -2388,10 +2501,10 @@ $result = $student->getAllStudents();
                     );
 
                 }
-                else if (input.value.length != 10) {
+                else if (input.value.length != 10 && input.value.length != 12) {
 
                     input.setCustomValidity(
-                        "Student Number must be exactly 10 digits."
+                        "Student Number must be 10 or 12 digits."
                     );
 
                 }
@@ -2630,8 +2743,8 @@ $result = $student->getAllStudents();
                 const validName = /^[\p{L}.'\-\s]+$/u;
 
                 let message = '';
-                if (!/^\d{10}$/.test(studentNumber)) {
-                    message = 'Student number must contain exactly 10 digits.';
+                if (!new RegExp('^<?= date('Y') ?>[0-9]{8}$').test(studentNumber)) {
+                    message = 'Student number must be generated for the current year.';
                 } else if (calculateStudentAge($('#add_date_of_birth').val()) === null ||
                     calculateStudentAge($('#add_date_of_birth').val()) < 18) {
                     message = 'Students must be at least 18 years old. Enter a valid date of birth.';
@@ -2722,7 +2835,7 @@ $result = $student->getAllStudents();
 
                 // Student Number
 
-                if (!/^\d{10}$/.test(student_no)) {
+                if (!/^(?:\d{10}|\d{12})$/.test(student_no)) {
 
                     e.preventDefault();
 
@@ -2733,7 +2846,7 @@ $result = $student->getAllStudents();
                         title: 'Invalid Student Number',
 
                         text:
-                            'Student Number must contain exactly 10 digits and numbers only.'
+                            'Student Number must contain 10 or 12 digits and numbers only.'
 
                     });
 
@@ -2854,7 +2967,7 @@ $result = $student->getAllStudents();
 
             // SweetAlert confirms for maintenance delete actions
 
-            $('.delete-user, .delete-instructor, .delete-program, .delete-role, .delete-semester, .delete-subject, .delete-curriculum-subject, .delete-class-schedule').on('click', function (e) {
+            $('.delete-user, .delete-instructor, .delete-program, .delete-department, .delete-role, .delete-semester, .delete-subject, .delete-curriculum-subject, .delete-class-schedule').on('click', function (e) {
 
                 e.preventDefault();
 
@@ -3011,11 +3124,23 @@ $result = $student->getAllStudents();
 
                 const id = $(this).data('id') || $(this).data('role-id');
                 const roleName = $(this).data('role-name');
+                let permissions = [];
+                try {
+                    permissions = JSON.parse(this.dataset.permissions || '[]');
+                } catch (error) {
+                    Swal.fire({ icon: 'error', title: 'Unable to load role access', text: 'Reload the page and try again.' });
+                    return;
+                }
 
                 $('#edit_role_id').val(id);
                 $('#edit_role_name').val(roleName);
+                $('#roleEditModal .edit-role-permission').each(function () {
+                    this.checked = permissions.includes(this.value);
+                });
 
                 setEditOriginals('#roleEditModal', ['#edit_role_name'], '#updateRoleBtn');
+                $('#updateRoleBtn')[0].originalPermissions =
+                    $('#roleEditModal .edit-role-permission:checked').map(function () { return this.value; }).get().sort();
 
                 $('#roleEditModal').modal('show');
             });

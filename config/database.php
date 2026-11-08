@@ -13,6 +13,19 @@ if ($conn->connect_error) {
 
 $conn->set_charset("utf8mb4");
 
+$departmentsTableCreated = $conn->query(
+    "CREATE TABLE IF NOT EXISTS `departments` (
+        `department_id` INT NOT NULL AUTO_INCREMENT,
+        `department_code` VARCHAR(45) NOT NULL,
+        `department_name` VARCHAR(255) NOT NULL,
+        PRIMARY KEY (`department_id`),
+        UNIQUE KEY `uq_departments_code` (`department_code`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+);
+if (!$departmentsTableCreated) {
+    die("Unable to initialize department maintenance: " . $conn->error);
+}
+
 $sectionsTableCheck = $conn->query("SHOW TABLES LIKE 'sections'");
 if (!$sectionsTableCheck) {
     die("Unable to check section maintenance schema: " . $conn->error);
@@ -22,6 +35,7 @@ if ($sectionsTableCheck->num_rows === 0) {
         "CREATE TABLE `sections` (
             `section_id` INT NOT NULL AUTO_INCREMENT,
             `section_name` VARCHAR(50) NOT NULL,
+            `year_level` VARCHAR(20) NOT NULL DEFAULT '1',
             `program_id` INT NOT NULL,
             PRIMARY KEY (`section_id`),
             UNIQUE KEY `uq_sections_name_program_year` (`section_name`, `program_id`, `year_level`),
@@ -92,6 +106,36 @@ foreach ($schemaChecks as [$table, $column, $expectedType]) {
         if (strpos($actualType, str_replace(" ", "", strtoupper($expectedType))) === false) {
             $conn->query("ALTER TABLE `$table` MODIFY `$column` $expectedType NOT NULL");
         }
+    }
+}
+
+$studentNumberUniqueIndex = $conn->query(
+    "SHOW INDEX FROM `information`
+     WHERE Column_name = 'Student_Number' AND Non_unique = 0"
+);
+if (!$studentNumberUniqueIndex) {
+    die("Unable to check student number uniqueness: " . $conn->error);
+}
+if ($studentNumberUniqueIndex->num_rows === 0) {
+    $duplicateStudentNumber = $conn->query(
+        "SELECT Student_Number
+         FROM `information`
+         GROUP BY Student_Number
+         HAVING COUNT(*) > 1
+         LIMIT 1"
+    );
+    if (!$duplicateStudentNumber) {
+        die("Unable to check for duplicate student numbers: " . $conn->error);
+    }
+    if ($duplicateStudentNumber->num_rows > 0) {
+        die("Duplicate student numbers exist. Resolve them before enabling student number uniqueness.");
+    }
+
+    if (!$conn->query(
+        "ALTER TABLE `information`
+         ADD UNIQUE KEY `uq_information_student_number` (`Student_Number`)"
+    )) {
+        die("Unable to enforce unique student numbers: " . $conn->error);
     }
 }
 
@@ -285,9 +329,107 @@ if ($studentRoleCheck && $studentRoleCheck->num_rows === 0) {
     if ($studentRoleInsert) {
         $studentRoleName = "Student";
         $studentRoleInsert->bind_param("s", $studentRoleName);
-        $studentRoleInsert->execute();
+        if (!$studentRoleInsert->execute()) {
+            die("Unable to create the student role: " . $studentRoleInsert->error);
+        }
         $studentRoleInsert->close();
     }
+}
+
+$duplicateRoles = $conn->query(
+    "SELECT r.id,
+            (SELECT MIN(canonical.id)
+             FROM `role` canonical
+            WHERE TRIM(canonical.rolename) = TRIM(r.rolename)) AS canonical_id
+     FROM `role` r
+     HAVING r.id <> canonical_id"
+);
+if (!$duplicateRoles) {
+    die("Unable to check for duplicate roles: " . $conn->error);
+}
+
+$updateDuplicateRoleUsers = $conn->prepare("UPDATE `user` SET role_id = ? WHERE role_id = ?");
+$deleteDuplicateRole = $conn->prepare("DELETE FROM `role` WHERE id = ?");
+if (!$updateDuplicateRoleUsers || !$deleteDuplicateRole) {
+    die("Unable to prepare duplicate role cleanup: " . $conn->error);
+}
+while ($duplicateRole = $duplicateRoles->fetch_assoc()) {
+    $canonicalRoleId = (int) $duplicateRole['canonical_id'];
+    $duplicateRoleId = (int) $duplicateRole['id'];
+    $updateDuplicateRoleUsers->bind_param("ii", $canonicalRoleId, $duplicateRoleId);
+    if (!$updateDuplicateRoleUsers->execute()) {
+        die("Unable to preserve users while merging duplicate roles: " . $updateDuplicateRoleUsers->error);
+    }
+
+    $deleteDuplicateRole->bind_param("i", $duplicateRoleId);
+    if (!$deleteDuplicateRole->execute()) {
+        die("Unable to remove a duplicate role: " . $deleteDuplicateRole->error);
+    }
+}
+$updateDuplicateRoleUsers->close();
+$deleteDuplicateRole->close();
+
+$roleNameUniqueIndex = $conn->query(
+    "SHOW INDEX FROM `role`
+     WHERE Column_name = 'rolename' AND Non_unique = 0"
+);
+if (!$roleNameUniqueIndex) {
+    die("Unable to check role name uniqueness: " . $conn->error);
+}
+if ($roleNameUniqueIndex->num_rows === 0) {
+    if (!$conn->query(
+        "ALTER TABLE `role`
+         ADD UNIQUE KEY `uq_role_rolename` (`rolename`)"
+    )) {
+        die("Unable to enforce unique role names: " . $conn->error);
+    }
+}
+
+$rolePermissionsTableCheck = $conn->query("SHOW TABLES LIKE 'role_permissions'");
+if (!$rolePermissionsTableCheck) {
+    die("Unable to check role permission schema: " . $conn->error);
+}
+$rolePermissionsTableWasCreated = $rolePermissionsTableCheck->num_rows === 0;
+$rolePermissionsTableCreated = $conn->query(
+    "CREATE TABLE IF NOT EXISTS `role_permissions` (
+        `role_id` INT NOT NULL,
+        `permission_key` VARCHAR(50) NOT NULL,
+        PRIMARY KEY (`role_id`, `permission_key`),
+        CONSTRAINT `fk_role_permissions_role`
+            FOREIGN KEY (`role_id`) REFERENCES `role` (`id`)
+            ON UPDATE CASCADE ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+);
+if (!$rolePermissionsTableCreated) {
+    die("Unable to initialize role permissions: " . $conn->error);
+}
+if ($rolePermissionsTableWasCreated) {
+    $defaultPermissions = [
+        'students', 'users', 'instructors', 'programs', 'departments', 'sections',
+        'roles', 'school_years', 'semesters', 'subjects', 'curriculum_subjects',
+        'class_schedules',
+    ];
+    $permissionInsert = $conn->prepare(
+        "INSERT INTO role_permissions (role_id, permission_key) VALUES (?, ?)"
+    );
+    if (!$permissionInsert) {
+        die("Unable to prepare existing role permissions: " . $conn->error);
+    }
+
+    $roleIds = $conn->query("SELECT id FROM `role`");
+    if (!$roleIds) {
+        die("Unable to load existing roles: " . $conn->error);
+    }
+    while ($roleRow = $roleIds->fetch_assoc()) {
+        $roleId = (int) $roleRow['id'];
+        foreach ($defaultPermissions as $permissionKey) {
+            $permissionInsert->bind_param("is", $roleId, $permissionKey);
+            if (!$permissionInsert->execute()) {
+                die("Unable to preserve existing role access: " . $permissionInsert->error);
+            }
+        }
+    }
+    $permissionInsert->close();
 }
 
 ?>
