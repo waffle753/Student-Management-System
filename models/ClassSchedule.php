@@ -34,6 +34,44 @@ class ClassSchedule
         );
     }
 
+    public function getSchedulesForInstructor($instructorId)
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT cs.id, cs.time_start, cs.time_end, cs.days, cs.room,
+                    COALESCE(csub.subject_id, cs.subject_id) AS subject_id,
+                    subject_record.SubjectCode, subject_record.SubjectName,
+                    COALESCE(csub.program_id, cs.program_id) AS program_id,
+                    program_record.CourseName AS Program_Name,
+                    csub.year_level AS Year_Level,
+                    semester_record.semester AS Semester_Name,
+                    COALESCE(section_record.section_name, cs.section) AS Section_Name
+             FROM class_schedules cs
+             LEFT JOIN curriculum_subjects csub ON csub.id = cs.curriculum_subject_id
+             LEFT JOIN subject subject_record
+                    ON subject_record.ID = COALESCE(csub.subject_id, cs.subject_id)
+             LEFT JOIN program program_record
+                    ON program_record.id = COALESCE(csub.program_id, cs.program_id)
+             LEFT JOIN semester semester_record ON semester_record.ID = csub.semester_id
+             LEFT JOIN sections section_record ON section_record.section_id = cs.section_id
+             WHERE cs.instructor_id = ?
+             ORDER BY program_record.CourseName, csub.year_level, semester_record.ID, subject_record.SubjectCode"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("i", $instructorId);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+
+        $schedules = $stmt->get_result();
+        $stmt->close();
+
+        return $schedules;
+    }
+
     public function getCurriculumSubjects()
     {
         return $this->conn->query(

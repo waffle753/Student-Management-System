@@ -3,11 +3,39 @@
 require_once __DIR__ . "/../config/auth.php";
 requireStaffLogin();
 include_once __DIR__ . "/../models/Instructor.php";
+include_once __DIR__ . "/../models/ClassSchedule.php";
 include_once __DIR__ . "/../config/pagination.php";
 
 $instructorModel = new Instructor();
+$classScheduleModel = new ClassSchedule();
 
 $instructors = $instructorModel->getAllInstructors();
+$scheduleResult = $classScheduleModel->getAllClassSchedules();
+$schedulesByInstructor = [];
+if (!$scheduleResult) {
+    die("Unable to load instructor class schedules.");
+}
+while ($scheduleRow = $scheduleResult->fetch_assoc()) {
+    $instructorId = (string) ($scheduleRow['instructor_id'] ?? '');
+    $sectionName = trim((string) ($scheduleRow['managed_section_name'] ?? ''));
+    if ($sectionName === '') {
+        $sectionName = trim((string) ($scheduleRow['section'] ?? 'Section not set'));
+    }
+
+    $schedulesByInstructor[$instructorId][] = [
+        'id' => (string) ($scheduleRow['id'] ?? ''),
+        'subject_code' => (string) ($scheduleRow['SubjectCode'] ?? ''),
+        'subject' => (string) ($scheduleRow['SubjectName'] ?? 'Subject unavailable'),
+        'program' => (string) ($scheduleRow['CourseName'] ?? 'Program unavailable'),
+        'year' => (string) ($scheduleRow['year_level'] ?? ''),
+        'semester' => (string) ($scheduleRow['SemesterName'] ?? 'Semester not set'),
+        'section' => $sectionName,
+        'time' => substr((string) ($scheduleRow['time_start'] ?? ''), 0, 5) . ' - ' .
+            substr((string) ($scheduleRow['time_end'] ?? ''), 0, 5),
+        'days' => (string) ($scheduleRow['days'] ?? ''),
+        'room' => (string) ($scheduleRow['room'] ?? ''),
+    ];
+}
 $recordsPerPage = 10;
 $currentPage = max(1, (int) ($_GET['list_page'] ?? 1));
 $totalRecords = $instructors ? $instructors->num_rows : 0;
@@ -64,8 +92,37 @@ if ($instructors) {
         background-color: rgba(59, 130, 246, 0.04);
     }
 
-    
-    </style>
+    .instructor-action-buttons {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(74px, 1fr));
+        gap: 8px;
+        align-items: stretch;
+        min-width: 340px;
+    }
+
+    .instructor-action-buttons .action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        width: 100%;
+        min-height: 42px;
+        margin: 0;
+        padding: 0.35rem 0.4rem;
+        line-height: 1.15;
+        white-space: normal;
+    }
+
+    .instructor-assigned-subjects-table {
+        min-width: 1150px;
+    }
+
+    .instructor-assigned-subjects-table th,
+    .instructor-assigned-subjects-table td {
+        white-space: nowrap;
+    }
+
+</style>
 
     <?php if (isset($_GET['status'])): ?>
         <script>
@@ -254,7 +311,7 @@ if ($instructors) {
                                             vertical-align: middle;
                                         ">
 
-                                        <div class="d-flex justify-content-center align-items-center" style="gap: 6px;">
+                                        <div class="instructor-action-buttons">
 
                                             <!-- View -->
                                             <button type="button" class="btn btn-secondary btn-sm action-btn view-instructor"
@@ -289,6 +346,14 @@ if ($instructors) {
                                                 Edit
                                             </button>
 
+                                            <!-- Assigned Subjects -->
+                                            <button type="button" class="btn btn-primary btn-sm action-btn view-instructor-subjects"
+                                                data-id="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES) ?>"
+                                                data-name="<?= htmlspecialchars($row['firstname'] . ' ' . $row['lastname'], ENT_QUOTES) ?>"
+                                                title="View assigned subjects">
+                                                <i class="fas fa-book"></i>
+                                                Subjects
+                                            </button>
 
                                             <!-- Delete -->
                                             <a href="Controller/Instructor/delete.php?id=<?= urlencode($row['id']) ?>"
@@ -653,6 +718,104 @@ if ($instructors) {
 
 </div>
 
+<div class="modal fade" id="instructorSubjectsModal" tabindex="-1" role="dialog" aria-labelledby="instructorSubjectsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="instructorSubjectsModalLabel">
+                    <i class="fas fa-book mr-2"></i>Assigned Subjects - <span id="instructorSubjectsName"></span>
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table modern-data-table instructor-assigned-subjects-table mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">ID</th>
+                                <th scope="col">Subject Code</th>
+                                <th scope="col">Subject</th>
+                                <th scope="col">Program</th>
+                                <th scope="col">Year Level</th>
+                                <th scope="col">Semester</th>
+                                <th scope="col">Section</th>
+                                <th scope="col">Time</th>
+                                <th scope="col">Days</th>
+                                <th scope="col">Room</th>
+                            </tr>
+                        </thead>
+                        <tbody id="instructorSubjectsRows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const schedulesByInstructor = <?= json_encode(
+            $schedulesByInstructor,
+            JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT
+        ) ?>;
+        const yearLabels = {
+            '1': '1st Year',
+            '2': '2nd Year',
+            '3': '3rd Year',
+            '4': '4th Year',
+            '5': '5th Year'
+        };
+        const rows = document.getElementById('instructorSubjectsRows');
+        const instructorName = document.getElementById('instructorSubjectsName');
+
+        document.querySelectorAll('.view-instructor-subjects').forEach(function (button) {
+            button.addEventListener('click', function () {
+                instructorName.textContent = button.dataset.name || '';
+                rows.replaceChildren();
+
+                const schedules = schedulesByInstructor[button.dataset.id] || [];
+                if (schedules.length === 0) {
+                    const row = document.createElement('tr');
+                    const cell = document.createElement('td');
+                    cell.colSpan = 10;
+                    cell.className = 'text-center text-muted py-4';
+                    cell.textContent = 'No subjects are assigned to this instructor.';
+                    row.appendChild(cell);
+                    rows.appendChild(row);
+                } else {
+                    schedules.forEach(function (schedule) {
+                        const row = document.createElement('tr');
+                        const values = [
+                            schedule.id,
+                            schedule.subject_code || 'Code unavailable',
+                            schedule.subject || 'Subject unavailable',
+                            schedule.program || 'Program unavailable',
+                            yearLabels[schedule.year] || 'Year not set',
+                            schedule.semester || 'Semester not set',
+                            schedule.section,
+                            schedule.time,
+                            schedule.days,
+                            schedule.room
+                        ];
+                        values.forEach(function (value) {
+                            const cell = document.createElement('td');
+                            cell.textContent = value || '';
+                            row.appendChild(cell);
+                        });
+                        rows.appendChild(row);
+                    });
+                }
+
+                $('#instructorSubjectsModal').modal('show');
+            });
+        });
+    })();
+</script>
 
 <!-- ================================================================
      EDIT INSTRUCTOR MODAL
@@ -678,8 +841,6 @@ if ($instructors) {
                     </button>
 
                 </div>
-
-
                 <div class="modal-body">
 
                     <input type="hidden" name="id" id="edit_instructor_id">
@@ -695,7 +856,6 @@ if ($instructors) {
                             required>
 
                     </div>
-
 
                     <div class="form-group">
 

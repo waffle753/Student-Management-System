@@ -27,6 +27,7 @@ class User
                     u.lastname,
                     u.role_id,
                     u.student_id,
+                    u.instructor_id,
                     r.rolename
                 FROM `user` AS u
                 LEFT JOIN `role` AS r
@@ -77,6 +78,7 @@ class User
                     u.lastname,
                     u.role_id,
                     u.student_id,
+                    u.instructor_id,
                     r.rolename
                 FROM `user` AS u
                 LEFT JOIN `role` AS r
@@ -109,7 +111,7 @@ class User
     {
         $stmt = $this->conn->prepare(
             "SELECT u.id, u.username, u.password, u.firstname, u.lastname,
-                    u.role_id, u.student_id, r.rolename
+                    u.role_id, u.student_id, u.instructor_id, r.rolename
              FROM `user` AS u
              LEFT JOIN `role` AS r ON u.role_id = r.id
              WHERE u.username = ?
@@ -184,6 +186,46 @@ class User
         );
     }
 
+    public function getInstructorOptions()
+    {
+        $result = $this->conn->query(
+            "SELECT i.id, i.Employee_ID, i.firstname, i.lastname,
+                    u.id AS assigned_user_id
+             FROM instructor i
+             LEFT JOIN `user` u ON u.instructor_id = i.id
+             ORDER BY i.lastname, i.firstname"
+        );
+        if (!$result) {
+            die("Failed to get teacher profiles: " . $this->conn->error);
+        }
+
+        return $result;
+    }
+
+    public function instructorIdAvailable($instructorId, $excludeUserId = 0)
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT i.id
+             FROM instructor AS i
+             LEFT JOIN `user` AS u ON u.instructor_id = i.id AND u.id != ?
+             WHERE i.id = ? AND u.id IS NULL"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("ii", $excludeUserId, $instructorId);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+
+        $available = $stmt->get_result()->num_rows > 0;
+        $stmt->close();
+
+        return $available;
+    }
+
     public function studentIdAvailable($studentId, $excludeUserId = 0)
     {
         $stmt = $this->conn->prepare(
@@ -219,7 +261,8 @@ class User
         $firstname,
         $lastname,
         $role_id,
-        $student_id = null
+        $student_id = null,
+        $instructor_id = null
     ) {
 
         $sql = "INSERT INTO `user`
@@ -229,9 +272,10 @@ class User
                     firstname,
                     lastname,
                     role_id,
-                    student_id
+                    student_id,
+                    instructor_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?)";
+                VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         $stmt = $this->conn->prepare($sql);
 
@@ -240,13 +284,14 @@ class User
         }
 
         $stmt->bind_param(
-            "ssssii",
+            "ssssiii",
             $username,
             $password,
             $firstname,
             $lastname,
             $role_id,
-            $student_id
+            $student_id,
+            $instructor_id
         );
 
         if (!$stmt->execute()) {
@@ -269,7 +314,8 @@ class User
         $firstname,
         $lastname,
         $role_id,
-        $student_id = null
+        $student_id = null,
+        $instructor_id = null
     ) {
 
         $sql = "UPDATE `user`
@@ -278,7 +324,8 @@ class User
                     firstname = ?,
                     lastname = ?,
                     role_id = ?,
-                    student_id = ?
+                    student_id = ?,
+                    instructor_id = ?
                 WHERE id = ?";
 
         $stmt = $this->conn->prepare($sql);
@@ -288,12 +335,13 @@ class User
         }
 
         $stmt->bind_param(
-            "sssiii",
+            "sssiiii",
             $username,
             $firstname,
             $lastname,
             $role_id,
             $student_id,
+            $instructor_id,
             $id
         );
 

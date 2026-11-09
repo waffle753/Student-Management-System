@@ -17,6 +17,7 @@ $firstname = trim($_POST['firstname'] ?? '');
 $lastname = trim($_POST['lastname'] ?? '');
 $role_id = isset($_POST['role_id']) ? intval($_POST['role_id']) : 0;
 $student_id = isset($_POST['student_id']) ? intval($_POST['student_id']) : 0;
+$instructor_id = isset($_POST['instructor_id']) ? intval($_POST['instructor_id']) : 0;
 
 if ($id <= 0 || $username === '' || $firstname === '' || $lastname === '' || $role_id <= 0) {
     header("Location: ../../index.php?page=user&status=error&title=Required+Field&message=All+user+fields+are+required.");
@@ -39,7 +40,7 @@ if (!$role) {
     exit;
 }
 
-if (strtolower($role['rolename']) === 'student') {
+if (strtolower(trim($role['rolename'])) === 'student') {
     if ($student_id <= 0 || !$user->studentIdAvailable($student_id, $id)) {
         header("Location: ../../index.php?page=user&status=error&title=Student+Required&message=Select+an+available+student+profile+for+this+account.");
         exit;
@@ -48,7 +49,16 @@ if (strtolower($role['rolename']) === 'student') {
     $student_id = null;
 }
 
-if ($user->updateUser($id, $username, $firstname, $lastname, $role_id, $student_id)) {
+if (strtolower(trim($role['rolename'])) === 'teacher') {
+    if ($instructor_id <= 0 || !$user->instructorIdAvailable($instructor_id, $id)) {
+        header("Location: ../../index.php?page=user&status=error&title=Teacher+Required&message=Select+an+available+teacher+profile+for+this+account.");
+        exit;
+    }
+} else {
+    $instructor_id = null;
+}
+
+if ($user->updateUser($id, $username, $firstname, $lastname, $role_id, $student_id, $instructor_id)) {
     header("Location: ../../index.php?page=user&status=success&title=Success&message=User+updated+successfully.");
     exit;
 }

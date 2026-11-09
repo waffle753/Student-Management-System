@@ -19,6 +19,13 @@ if ($roleResult) {
         $roles[] = $role;
     }
 }
+$instructorResult = $user->getInstructorOptions();
+$instructorOptions = [];
+if ($instructorResult) {
+    while ($instructorOption = $instructorResult->fetch_assoc()) {
+        $instructorOptions[] = $instructorOption;
+    }
+}
 $studentResult = $user->getStudentOptions();
 $studentOptions = [];
 if ($studentResult) {
@@ -267,13 +274,28 @@ if ($users) {
                     </div>
 
                     <div class="col-md-3">
-                        <div class="form-group">
+                        <div class="form-group d-none" id="add_student_profile_group">
                             <label for="add_student_id">Student Profile</label>
                             <select name="student_id" id="add_student_id" class="form-control" disabled>
                                 <option value="">Select student</option>
                                 <?php foreach ($studentOptions as $studentOption): ?>
                                     <option value="<?= htmlspecialchars($studentOption['ID']) ?>">
                                         <?= htmlspecialchars($studentOption['Student_Number'] . ' - ' . $studentOption['First_Name'] . ' ' . $studentOption['Last_Name']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="form-group d-none" id="add_instructor_profile_group">
+                            <label for="add_instructor_id">Teacher Profile</label>
+                            <select name="instructor_id" id="add_instructor_id" class="form-control" disabled>
+                                <option value="">Select teacher</option>
+                                <?php foreach ($instructorOptions as $instructorOption): ?>
+                                    <option value="<?= htmlspecialchars((string) $instructorOption['id']) ?>"
+                                        data-assigned-user-id="<?= htmlspecialchars((string) ($instructorOption['assigned_user_id'] ?? '')) ?>">
+                                        <?= htmlspecialchars($instructorOption['Employee_ID'] . ' - ' . $instructorOption['firstname'] . ' ' . $instructorOption['lastname']) ?>
                                     </option>
                                 <?php endforeach; ?>
                             </select>
@@ -458,7 +480,8 @@ if ($users) {
                                                     '<?= htmlspecialchars($row['firstname'], ENT_QUOTES) ?>',
                                                     '<?= htmlspecialchars($row['lastname'], ENT_QUOTES) ?>',
                                                     '<?= htmlspecialchars($roleId, ENT_QUOTES) ?>',
-                                                    '<?= htmlspecialchars((string) ($row['student_id'] ?? ''), ENT_QUOTES) ?>'
+                                                    '<?= htmlspecialchars((string) ($row['student_id'] ?? ''), ENT_QUOTES) ?>',
+                                                    '<?= htmlspecialchars((string) ($row['instructor_id'] ?? ''), ENT_QUOTES) ?>'
                                                 )">
 
                                                 <i class="fas fa-edit"></i>
@@ -528,13 +551,25 @@ if ($users) {
 </div>
 
 <script>
-    function syncStudentSelector(roleSelect, studentSelect) {
+    function syncRoleProfileSelectors(roleSelect, studentSelect, instructorSelect, studentGroup, instructorGroup, currentUserId) {
         const roleName = roleSelect.selectedOptions[0]?.dataset.roleName?.toLowerCase();
         const isStudent = roleName === 'student';
+        const isTeacher = roleName === 'teacher';
         studentSelect.disabled = !isStudent;
         studentSelect.required = isStudent;
+        studentGroup.classList.toggle('d-none', !isStudent);
         if (!isStudent) {
             studentSelect.value = '';
+        }
+        instructorSelect.disabled = !isTeacher;
+        instructorSelect.required = isTeacher;
+        instructorGroup.classList.toggle('d-none', !isTeacher);
+        Array.from(instructorSelect.options).forEach(function (option) {
+            const assignedUserId = Number(option.dataset.assignedUserId || 0);
+            option.disabled = assignedUserId > 0 && assignedUserId !== currentUserId;
+        });
+        if (!isTeacher) {
+            instructorSelect.value = '';
         }
     }
 
@@ -560,18 +595,37 @@ if ($users) {
         const confirmPasswordInput = document.getElementById('add_user_confirm_password');
         const addRoleSelect = document.getElementById('add_role_id');
         const addStudentSelect = document.getElementById('add_student_id');
+        const addInstructorSelect = document.getElementById('add_instructor_id');
+        const addStudentGroup = document.getElementById('add_student_profile_group');
+        const addInstructorGroup = document.getElementById('add_instructor_profile_group');
 
-        if (addRoleSelect && addStudentSelect) {
+        if (addUserForm && addRoleSelect && addStudentSelect && addInstructorSelect && addStudentGroup && addInstructorGroup) {
             addRoleSelect.addEventListener('change', function () {
-                syncStudentSelector(addRoleSelect, addStudentSelect);
+                syncRoleProfileSelectors(addRoleSelect, addStudentSelect, addInstructorSelect, addStudentGroup, addInstructorGroup, 0);
+            });
+            syncRoleProfileSelectors(addRoleSelect, addStudentSelect, addInstructorSelect, addStudentGroup, addInstructorGroup, 0);
+            addUserForm.addEventListener('reset', function () {
+                window.setTimeout(function () {
+                    syncRoleProfileSelectors(addRoleSelect, addStudentSelect, addInstructorSelect, addStudentGroup, addInstructorGroup, 0);
+                }, 0);
             });
         }
 
         const editRoleSelect = document.getElementById('edit_role_id');
         const editStudentSelect = document.getElementById('edit_student_id');
-        if (editRoleSelect && editStudentSelect) {
+        const editInstructorSelect = document.getElementById('edit_instructor_id');
+        const editStudentGroup = document.getElementById('edit_student_profile_group');
+        const editInstructorGroup = document.getElementById('edit_instructor_profile_group');
+        if (editRoleSelect && editStudentSelect && editInstructorSelect && editStudentGroup && editInstructorGroup) {
             editRoleSelect.addEventListener('change', function () {
-                syncStudentSelector(editRoleSelect, editStudentSelect);
+                syncRoleProfileSelectors(
+                    editRoleSelect,
+                    editStudentSelect,
+                    editInstructorSelect,
+                    editStudentGroup,
+                    editInstructorGroup,
+                    Number(document.getElementById('edit_id').value) || 0
+                );
             });
         }
 
@@ -701,13 +755,26 @@ if ($users) {
 
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group d-none" id="edit_student_profile_group">
                         <label for="edit_student_id">Student Profile</label>
                         <select name="student_id" id="edit_student_id" class="form-control" disabled>
                             <option value="">Select student</option>
                             <?php foreach ($studentOptions as $studentOption): ?>
                                 <option value="<?= htmlspecialchars($studentOption['ID']) ?>">
                                     <?= htmlspecialchars($studentOption['Student_Number'] . ' - ' . $studentOption['First_Name'] . ' ' . $studentOption['Last_Name']) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div class="form-group d-none" id="edit_instructor_profile_group">
+                        <label for="edit_instructor_id">Teacher Profile</label>
+                        <select name="instructor_id" id="edit_instructor_id" class="form-control" disabled>
+                            <option value="">Select teacher</option>
+                            <?php foreach ($instructorOptions as $instructorOption): ?>
+                                <option value="<?= htmlspecialchars((string) $instructorOption['id']) ?>"
+                                    data-assigned-user-id="<?= htmlspecialchars((string) ($instructorOption['assigned_user_id'] ?? '')) ?>">
+                                    <?= htmlspecialchars($instructorOption['Employee_ID'] . ' - ' . $instructorOption['firstname'] . ' ' . $instructorOption['lastname']) ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
@@ -1027,7 +1094,8 @@ if ($users) {
         firstname,
         lastname,
         role_id,
-        student_id
+        student_id,
+        instructor_id
     ) {
 
         document.getElementById("edit_id").value =
@@ -1053,9 +1121,15 @@ if ($users) {
 
         document.getElementById("edit_student_id").value =
             student_id;
-        syncStudentSelector(
+        document.getElementById("edit_instructor_id").value =
+            instructor_id;
+        syncRoleProfileSelectors(
             document.getElementById("edit_role_id"),
-            document.getElementById("edit_student_id")
+            document.getElementById("edit_student_id"),
+            document.getElementById("edit_instructor_id"),
+            document.getElementById("edit_student_profile_group"),
+            document.getElementById("edit_instructor_profile_group"),
+            Number(id) || 0
         );
 
         const updateUserButton = document.getElementById("updateUserBtn");
@@ -1064,6 +1138,7 @@ if ($users) {
         updateUserButton.dataset.originalLastname = lastname;
         updateUserButton.dataset.originalRoleId = role_id;
         updateUserButton.dataset.originalStudentId = student_id;
+        updateUserButton.dataset.originalInstructorId = instructor_id;
         updateUserButton.disabled = true;
 
         document.getElementById("edit_new_password").value = "";
@@ -1079,7 +1154,7 @@ if ($users) {
     document.addEventListener("change", updateUserButtonState);
 
     function updateUserButtonState(event) {
-        if (!event.target.matches("#edit_username, #edit_firstname, #edit_lastname, #edit_role_id, #edit_student_id")) {
+        if (!event.target.matches("#edit_username, #edit_firstname, #edit_lastname, #edit_role_id, #edit_student_id, #edit_instructor_id")) {
             return;
         }
 
@@ -1094,7 +1169,8 @@ if ($users) {
             document.getElementById("edit_firstname").value === updateUserButton.dataset.originalFirstname &&
             document.getElementById("edit_lastname").value === updateUserButton.dataset.originalLastname &&
             document.getElementById("edit_role_id").value === updateUserButton.dataset.originalRoleId &&
-            document.getElementById("edit_student_id").value === updateUserButton.dataset.originalStudentId;
+            document.getElementById("edit_student_id").value === updateUserButton.dataset.originalStudentId &&
+            document.getElementById("edit_instructor_id").value === updateUserButton.dataset.originalInstructorId;
     }
 
     const updateUserForm = document.querySelector('form[action="Controller/User/update.php"]');

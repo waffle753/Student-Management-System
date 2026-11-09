@@ -36,14 +36,15 @@ if ($programs) {
 }
 
 $knownPages = [
-    'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
+    'teacher', 'teacher_students', 'teacher_classes', 'teacher_grades', 'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
     'schoolyear', 'semester', 'subject', 'curriculum_subject', 'class_schedule',
 ];
-$requestedPage = $_GET['page'] ?? 'students';
+$isTeacherRole = strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'teacher';
+$requestedPage = $_GET['page'] ?? ($isTeacherRole ? 'teacher' : 'students');
 $page = is_string($requestedPage) && in_array($requestedPage, $knownPages, true)
     ? $requestedPage
-    : 'students';
-if (!isset($_GET['page']) && !hasRolePermission('students')) {
+    : ($isTeacherRole ? 'teacher' : 'students');
+if (!isset($_GET['page']) && !$isTeacherRole && !hasRolePermission('students')) {
     $availablePages = [
         'user' => 'users',
         'instructor' => 'instructors',
@@ -738,7 +739,63 @@ $result = $student->getAllStudents();
 
                     <ul class="nav nav-pills nav-sidebar flex-column">
 
-                        <?php if (hasRolePermission('students')): ?>
+                        <?php if (strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'teacher'): ?>
+
+                        <li class="nav-item">
+
+                            <a href="index.php?page=teacher" class="nav-link <?= $page === 'teacher' ? 'active' : '' ?>">
+
+                                <i class="nav-icon fas fa-chalkboard-teacher"></i>
+
+                                <p>Dashboard</p>
+
+                            </a>
+
+                        </li>
+
+                        <?php endif; ?>
+
+                        <?php if ($isTeacherRole): ?>
+
+                        <li class="nav-item">
+
+                            <a href="index.php?page=teacher_students" class="nav-link <?= $page === 'teacher_students' ? 'active' : '' ?>">
+
+                                <i class="nav-icon fas fa-user-graduate"></i>
+
+                                <p>My Student</p>
+
+                            </a>
+
+                        </li>
+
+                        <li class="nav-item">
+
+                            <a href="index.php?page=teacher_classes" class="nav-link <?= $page === 'teacher_classes' ? 'active' : '' ?>">
+
+                                <i class="nav-icon fas fa-chalkboard"></i>
+
+                                <p>My Classes</p>
+
+                            </a>
+
+                        </li>
+
+                        <li class="nav-item">
+
+                            <a href="index.php?page=teacher_grades" class="nav-link <?= $page === 'teacher_grades' ? 'active' : '' ?>">
+
+                                <i class="nav-icon fas fa-star"></i>
+
+                                <p>Grades</p>
+
+                            </a>
+
+                        </li>
+
+                        <?php endif; ?>
+
+                        <?php if (hasRolePermission('students') && strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) !== 'teacher'): ?>
 
                         <li class="nav-item">
 
@@ -761,7 +818,8 @@ $result = $student->getAllStudents();
                             'users', 'instructors', 'programs', 'departments', 'sections', 'roles',
                             'school_years', 'semesters', 'subjects', 'curriculum_subjects', 'class_schedules',
                         ];
-                        $canSeeMaintenance = count(array_intersect($maintenancePermissions, getRolePermissions())) > 0;
+                        $canSeeMaintenance = !$isTeacherRole
+                            && count(array_intersect($maintenancePermissions, getRolePermissions())) > 0;
                         ?>
                         <?php if ($canSeeMaintenance): ?>
                         <li class="nav-item">
@@ -889,7 +947,11 @@ $result = $student->getAllStudents();
 
         <div class="content-wrapper">
 
-            <?php if ($page === 'user'): ?>
+            <?php if (in_array($page, ['teacher', 'teacher_students', 'teacher_classes', 'teacher_grades'], true)): ?>
+
+                <?php include "view/teacher.php"; ?>
+
+            <?php elseif ($page === 'user'): ?>
 
                 <?php include "view/user.php"; ?>
 

@@ -40,6 +40,75 @@ class Student
         return $this->conn->query($sql);
     }
 
+    public function getStudentsForInstructor($instructorId)
+    {
+        $stmt = $this->conn->prepare(
+            "SELECT DISTINCT info.*, COALESCE(sem.semester, info.Semester) AS Semester_Name,
+                    COALESCE(student_section.section_name, assigned_section.section_name) AS Section_Name,
+                    COALESCE(student_program.CourseName, assigned_program.CourseName) AS Program_Name,
+                    COALESCE(student_section.year_level, assigned_section.year_level) AS Year_Level
+             FROM information info
+             INNER JOIN class_schedules schedule ON schedule.instructor_id = ?
+             LEFT JOIN curriculum_subjects schedule_curriculum
+                    ON schedule_curriculum.id = schedule.curriculum_subject_id
+             INNER JOIN sections assigned_section
+                    ON assigned_section.section_id = schedule.section_id
+                    OR (
+                        schedule.section_id IS NULL
+                        AND assigned_section.section_name = schedule.section
+                        AND assigned_section.program_id = COALESCE(schedule.program_id, schedule_curriculum.program_id)
+                        AND (
+                            schedule_curriculum.year_level IS NULL
+                            OR assigned_section.year_level = schedule_curriculum.year_level
+                        )
+                        AND (
+                            schedule_curriculum.year_level IS NOT NULL
+                            OR (
+                                SELECT COUNT(*)
+                                FROM sections schedule_section_candidate
+                                WHERE schedule_section_candidate.program_id = assigned_section.program_id
+                                  AND schedule_section_candidate.section_name = schedule.section
+                            ) = 1
+                        )
+                    )
+             INNER JOIN program assigned_program
+                    ON assigned_program.id = assigned_section.program_id
+             LEFT JOIN sections student_section ON student_section.section_id = info.Section_ID
+             LEFT JOIN program student_program ON student_program.id = student_section.program_id
+             LEFT JOIN semester sem ON sem.ID = info.Semester_ID
+             WHERE info.Active = 0
+               AND (
+                    info.Section_ID = assigned_section.section_id
+                    OR (
+                        info.Section_ID IS NULL
+                        AND TRIM(info.Course) = TRIM(assigned_program.CourseName)
+                        AND TRIM(info.Year_Level) = TRIM(assigned_section.year_level)
+                        AND (
+                            SELECT COUNT(*)
+                            FROM sections cohort_section
+                            WHERE cohort_section.program_id = assigned_section.program_id
+                              AND cohort_section.year_level = assigned_section.year_level
+                        ) = 1
+                    )
+               )
+             ORDER BY info.ID DESC"
+        );
+        if (!$stmt) {
+            return false;
+        }
+
+        $stmt->bind_param("i", $instructorId);
+        if (!$stmt->execute()) {
+            $stmt->close();
+            return false;
+        }
+
+        $students = $stmt->get_result();
+        $stmt->close();
+
+        return $students;
+    }
+
     // Get one student
     public function getStudentById($id)
     {

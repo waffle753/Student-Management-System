@@ -144,7 +144,13 @@ function hasRolePermission($permissionKey)
 
 function requireRolePermission($permissionKey)
 {
+    if (in_array($permissionKey, ['teacher', 'teacher_students', 'teacher_classes', 'teacher_grades'], true)
+        && strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'teacher') {
+        return;
+    }
+
     $pagePermissions = [
+        'teacher' => 'students',
         'students' => 'students',
         'user' => 'users',
         'instructor' => 'instructors',

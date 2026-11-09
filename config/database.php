@@ -6,6 +6,7 @@ $password = "1234";
 $database = "student_management";
 
 $conn = new mysqli($host, $user, $password, $database);
+$GLOBALS['conn'] = $conn;
 
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
@@ -142,6 +143,32 @@ if ($studentNumberUniqueIndex->num_rows === 0) {
 $studentLinkCheck = $conn->query("SHOW COLUMNS FROM `user` LIKE 'student_id'");
 if ($studentLinkCheck && $studentLinkCheck->num_rows === 0) {
     $conn->query("ALTER TABLE `user` ADD COLUMN `student_id` INT NULL UNIQUE");
+}
+
+$instructorLinkCheck = $conn->query("SHOW COLUMNS FROM `user` LIKE 'instructor_id'");
+if (!$instructorLinkCheck) {
+    die("Unable to check teacher account schema: " . $conn->error);
+}
+if ($instructorLinkCheck->num_rows === 0) {
+    if (!$conn->query("ALTER TABLE `user` ADD COLUMN `instructor_id` INT NULL")) {
+        die("Unable to add teacher account link: " . $conn->error);
+    }
+}
+
+$instructorLinkIndexCheck = $conn->query(
+    "SHOW INDEX FROM `user`
+     WHERE Column_name = 'instructor_id' AND Non_unique = 0"
+);
+if (!$instructorLinkIndexCheck) {
+    die("Unable to check teacher account uniqueness: " . $conn->error);
+}
+if ($instructorLinkIndexCheck->num_rows === 0) {
+    if (!$conn->query(
+        "ALTER TABLE `user`
+         ADD UNIQUE KEY `uq_user_instructor_id` (`instructor_id`)"
+    )) {
+        die("Unable to enforce one account per teacher: " . $conn->error);
+    }
 }
 
 $classScheduleProgramCheck = $conn->query("SHOW COLUMNS FROM `class_schedules` LIKE 'program_id'");

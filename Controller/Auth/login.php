@@ -20,6 +20,7 @@ if (!$user || !password_verify($password, $user['password'])) {
 }
 
 $isStudent = strtolower($user['rolename'] ?? '') === 'student';
+$isTeacher = strtolower(trim($user['rolename'] ?? '')) === 'teacher';
 $studentId = $isStudent ? (int) ($user['student_id'] ?? 0) : 0;
 if ($isStudent) {
     $studentModel = new Student();
@@ -35,7 +36,10 @@ $_SESSION['username'] = $user['username'];
 $_SESSION['role_id'] = (int) $user['role_id'];
 $_SESSION['role_name'] = $user['rolename'];
 $_SESSION['student_id'] = $isStudent ? $studentId : null;
+$_SESSION['instructor_id'] = $isTeacher ? (int) ($user['instructor_id'] ?? 0) : null;
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 
-header('Location: ' . ($isStudent ? '../../student.php' : '../../index.php'));
+header('Location: ' . ($isStudent
+    ? '../../student.php'
+    : ($isTeacher ? '../../index.php?page=teacher' : '../../index.php')));
 exit;

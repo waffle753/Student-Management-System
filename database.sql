@@ -140,9 +140,11 @@ CREATE TABLE IF NOT EXISTS `user` (
     `lastname` VARCHAR(100) NOT NULL,
     `role_id` INT NOT NULL,
     `student_id` INT NULL,
+    `instructor_id` INT NULL,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uq_user_username` (`username`),
     UNIQUE KEY `uq_user_student_id` (`student_id`),
+    UNIQUE KEY `uq_user_instructor_id` (`instructor_id`),
     KEY `idx_user_role_id` (`role_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

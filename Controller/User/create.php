@@ -18,6 +18,7 @@ $firstname = trim($_POST['firstname'] ?? '');
 $lastname  = trim($_POST['lastname'] ?? '');
 $role_id   = (int) ($_POST['role_id'] ?? 0);
 $student_id = (int) ($_POST['student_id'] ?? 0);
+$instructor_id = (int) ($_POST['instructor_id'] ?? 0);
 
 if ($username === '' || $password === '' || $confirmPassword === '' || $firstname === '' || $lastname === '' || $role_id <= 0) {
     header("Location: ../../index.php?page=user&status=error&title=Required+Field&message=All+user+fields+are+required.");
@@ -45,7 +46,7 @@ if (!$role) {
     exit;
 }
 
-if (strtolower($role['rolename']) === 'student') {
+if (strtolower(trim($role['rolename'])) === 'student') {
     if ($student_id <= 0 || !$user->studentIdAvailable($student_id)) {
         header("Location: ../../index.php?page=user&status=error&title=Student+Required&message=Select+an+available+student+profile+for+this+account.");
         exit;
@@ -54,9 +55,18 @@ if (strtolower($role['rolename']) === 'student') {
     $student_id = null;
 }
 
+if (strtolower(trim($role['rolename'])) === 'teacher') {
+    if ($instructor_id <= 0 || !$user->instructorIdAvailable($instructor_id)) {
+        header("Location: ../../index.php?page=user&status=error&title=Teacher+Required&message=Select+an+available+teacher+profile+for+this+account.");
+        exit;
+    }
+} else {
+    $instructor_id = null;
+}
+
 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
-if ($user->addUser($username, $hashedPassword, $firstname, $lastname, $role_id, $student_id)) {
+if ($user->addUser($username, $hashedPassword, $firstname, $lastname, $role_id, $student_id, $instructor_id)) {
     header("Location: ../../index.php?page=user&status=success&title=Success&message=User+created+successfully.");
     exit;
 }
