@@ -180,7 +180,28 @@ CREATE TABLE IF NOT EXISTS `class_schedules` (
         ON UPDATE CASCADE ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT IGNORE INTO `role` (`rolename`) VALUES ('Admin'), ('Student');
+CREATE TABLE IF NOT EXISTS `student_grades` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `class_schedule_id` INT NOT NULL,
+    `student_id` INT NOT NULL,
+    `instructor_id` INT NOT NULL,
+    `grade` DECIMAL(5,2) NOT NULL,
+    `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uq_student_grades_schedule_student` (`class_schedule_id`, `student_id`),
+    KEY `idx_student_grades_student_id` (`student_id`),
+    CONSTRAINT `fk_student_grades_schedule`
+        FOREIGN KEY (`class_schedule_id`) REFERENCES `class_schedules` (`id`)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT `fk_student_grades_student`
+        FOREIGN KEY (`student_id`) REFERENCES `information` (`ID`)
+        ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT `fk_student_grades_instructor`
+        FOREIGN KEY (`instructor_id`) REFERENCES `instructor` (`id`)
+        ON UPDATE CASCADE ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT IGNORE INTO `role` (`rolename`) VALUES ('Admin'), ('Student'), ('Registrar');
 
 INSERT IGNORE INTO `role_permissions` (`role_id`, `permission_key`)
 SELECT `id`, permission_key
@@ -200,3 +221,30 @@ CROSS JOIN (
     UNION ALL SELECT 'class_schedules'
 ) permissions
 WHERE `rolename` IN ('Admin', 'Student');
+
+INSERT IGNORE INTO `role_permissions` (`role_id`, `permission_key`)
+SELECT registrar_role.`id`, registrar_permission.permission_key
+FROM `role` registrar_role
+CROSS JOIN (
+    SELECT 'students' AS permission_key
+    UNION ALL SELECT 'programs'
+    UNION ALL SELECT 'departments'
+    UNION ALL SELECT 'sections'
+    UNION ALL SELECT 'school_years'
+    UNION ALL SELECT 'semesters'
+    UNION ALL SELECT 'subjects'
+    UNION ALL SELECT 'curriculum_subjects'
+    UNION ALL SELECT 'class_schedules'
+) registrar_permission
+WHERE LOWER(TRIM(registrar_role.`rolename`)) = 'registrar';
+
+DELETE FROM `role_permissions`
+WHERE `role_id` IN (
+    SELECT registrar_role.`id`
+    FROM `role` registrar_role
+    WHERE LOWER(TRIM(registrar_role.`rolename`)) = 'registrar'
+)
+AND `permission_key` NOT IN (
+    'students', 'programs', 'departments', 'sections', 'school_years',
+    'semesters', 'subjects', 'curriculum_subjects', 'class_schedules'
+);

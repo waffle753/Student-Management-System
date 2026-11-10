@@ -36,10 +36,11 @@ if ($programs) {
 }
 
 $knownPages = [
-    'teacher', 'teacher_students', 'teacher_classes', 'teacher_grades', 'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
-    'schoolyear', 'semester', 'subject', 'curriculum_subject', 'class_schedule',
+    'teacher', 'teacher_students', 'teacher_classes', 'teacher_grades', 'user_manual', 'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
+    'schoolyear', 'semester', 'subject', 'curriculum_subject', 'class_schedule', 'registrar_student_records',
 ];
 $isTeacherRole = strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'teacher';
+$isRegistrarRole = strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'registrar';
 $requestedPage = $_GET['page'] ?? ($isTeacherRole ? 'teacher' : 'students');
 $page = is_string($requestedPage) && in_array($requestedPage, $knownPages, true)
     ? $requestedPage
@@ -65,11 +66,64 @@ if (!isset($_GET['page']) && !$isTeacherRole && !hasRolePermission('students')) 
         }
     }
 }
-requireRolePermission($page);
+if ($page === 'registrar_student_records') {
+    if (!$isRegistrarRole) {
+        http_response_code(403);
+        exit('You do not have permission to access this area.');
+    }
+    requireRolePermission('students');
+} elseif ($page !== 'user_manual') {
+    requireRolePermission($page);
+}
 $semesterOptions = [];
 $sectionOptions = [];
 $departmentOptions = [];
 $newStudentNumber = '';
+if ($page === 'registrar_student_records') {
+    $registrarStudentId = filter_var($_GET['student_id'] ?? null, FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 1],
+    ]);
+    if ($registrarStudentId === false || $registrarStudentId === null) {
+        http_response_code(400);
+        exit('A valid student ID is required.');
+    }
+
+    $registrarStudent = $student->getStudentById($registrarStudentId);
+    if (!$registrarStudent) {
+        http_response_code(404);
+        exit('Student record not found.');
+    }
+
+    $registrarRecordType = in_array($_GET['record'] ?? '', ['subjects', 'grades'], true)
+        ? $_GET['record']
+        : 'subjects';
+    if ($registrarRecordType === 'subjects') {
+        require_once __DIR__ . '/models/CurriculumSubject.php';
+        $registrarSubjectLoad = (new CurriculumSubject())->getStudentLoad(
+            $registrarStudent['Course'] ?? '',
+            $registrarStudent['Year_Level'] ?? '',
+            $registrarStudent['Semester_Name'] ?? $registrarStudent['Semester'] ?? '',
+            (int) ($registrarStudent['Semester_ID'] ?? 0),
+            (int) ($registrarStudent['Section_ID'] ?? 0)
+        );
+        if ($registrarSubjectLoad === false) {
+            die('Unable to load the student’s scheduled subjects.');
+        }
+    } else {
+        require_once __DIR__ . '/models/Grade.php';
+        $registrarGradeResult = (new Grade())->getGradesForStudent((int) $registrarStudent['ID']);
+        if ($registrarGradeResult === false) {
+            die('Unable to load the student’s grades.');
+        }
+        $registrarGradeRows = $registrarGradeResult->fetch_all(MYSQLI_ASSOC);
+    }
+
+    if (($_GET['popup'] ?? '') === '1') {
+        header('Content-Type: text/html; charset=UTF-8');
+        include 'view/registrar_student_records.php';
+        exit;
+    }
+}
 if ($page === 'students') {
     $semesterModel = new Semester();
     $semesters = $semesterModel->getAllSemesters();
@@ -548,6 +602,10 @@ $result = $student->getAllStudents();
         white-space: nowrap;
     }
 
+    #studentTable .student-actions-cell.registrar-actions-cell {
+        width: 380px;
+    }
+
     #studentTable .student-actions-cell .action-btn {
         width: auto !important;
         min-width: 0;
@@ -934,6 +992,30 @@ $result = $student->getAllStudents();
                         </li>
                         <?php endif; ?>
 
+                        <li class="nav-item <?= $page === 'user_manual' ? 'menu-open' : '' ?>">
+                            <a href="#" class="nav-link" onclick="toggleSettings(event)" aria-expanded="<?= $page === 'user_manual' ? 'true' : 'false' ?>">
+                                <i class="nav-icon fas fa-cog"></i>
+                                <p>Settings<i class="right fas fa-angle-left"></i></p>
+                            </a>
+                            <ul id="settingsMenu" class="nav nav-treeview" style="display: <?= $page === 'user_manual' ? 'block' : 'none' ?>;">
+                                <li class="nav-item">
+                                    <a href="index.php?page=user_manual" class="nav-link <?= $page === 'user_manual' ? 'active' : '' ?>" <?= $page === 'user_manual' ? 'aria-current="page"' : '' ?>>
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>User Manual</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <form method="post" action="logout.php" class="mb-0">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
+                                        <button type="submit" class="nav-link text-left w-100 border-0 bg-transparent">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Logout</p>
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+
                     </ul>
 
                 </nav>
@@ -994,6 +1076,14 @@ $result = $student->getAllStudents();
             <?php elseif ($page === 'class_schedule'): ?>
 
                 <?php include "view/class_schedule.php"; ?>
+
+            <?php elseif ($page === 'registrar_student_records'): ?>
+
+                <?php include "view/registrar_student_records.php"; ?>
+
+            <?php elseif ($page === 'user_manual'): ?>
+
+                <?php include "view/user_manual.php"; ?>
 
             <?php else: ?>
 
@@ -1646,7 +1736,7 @@ $result = $student->getAllStudents();
                                                         <?= htmlspecialchars($emergencyAddress !== '' ? $emergencyAddress : ''); ?>
                                                     </td>
 
-                                                    <td class="text-center student-actions-cell">
+                                                    <td class="text-center student-actions-cell <?= $isRegistrarRole ? 'registrar-actions-cell' : ''; ?>">
 
                                                         <div class="d-flex justify-content-center align-items-center">
 
@@ -1701,6 +1791,21 @@ $result = $student->getAllStudents();
                                                             </button>
 
 
+                                                            <?php if ($isRegistrarRole): ?>
+                                                                <button type="button" data-record="subjects" data-student-id="<?= (int) $row['ID']; ?>"
+                                                                    class="btn btn-success btn-sm action-btn mr-1 registrarRecordBtn"
+                                                                    aria-label="View enrolled subjects for <?= htmlspecialchars((string) $row['Student_Number'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                                    <i class="fas fa-book"></i>
+                                                                    Subjects
+                                                                </button>
+                                                                <button type="button" data-record="grades" data-student-id="<?= (int) $row['ID']; ?>"
+                                                                    class="btn btn-primary btn-sm action-btn mr-1 registrarRecordBtn"
+                                                                    aria-label="View grades for <?= htmlspecialchars((string) $row['Student_Number'], ENT_QUOTES, 'UTF-8'); ?>">
+                                                                    <i class="fas fa-star"></i>
+                                                                    Grades
+                                                                </button>
+                                                            <?php endif; ?>
+
                                                             <!-- Delete -->
 
                                                             <a href="delete.php?id=<?= $row['ID']; ?>"
@@ -1750,6 +1855,23 @@ $result = $student->getAllStudents();
 
     </div>
 
+    <?php if ($isRegistrarRole): ?>
+    <div class="modal fade" id="registrarRecordModal" tabindex="-1" role="dialog" aria-labelledby="registrarRecordModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+            <div class="modal-content">
+                <div class="modal-header bg-primary">
+                    <h5 class="modal-title" id="registrarRecordModalTitle">Student Record</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body" id="registrarRecordModalBody">
+                    <div class="text-center text-muted">Select Subjects or Grades to view this student's record.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <!-- View Student Modal -->
 
@@ -2486,6 +2608,29 @@ $result = $student->getAllStudents();
                 const age = calculateStudentAge(dateOfBirth);
                 $('#view_age').val(age === null ? '' : age);
 
+            });
+
+            $('.registrarRecordBtn').click(function () {
+                const recordType = $(this).data('record');
+                const studentId = $(this).data('student-id');
+                const title = recordType === 'grades' ? 'Student Grades' : 'Enrolled Subjects';
+                $('#registrarRecordModalTitle').text(title);
+                $('#registrarRecordModalBody').html('<div class="text-center text-muted"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</div>');
+                $('#registrarRecordModal').modal('show');
+
+                fetch(`index.php?page=registrar_student_records&popup=1&record=${encodeURIComponent(recordType)}&student_id=${encodeURIComponent(studentId)}`)
+                    .then((response) => response.text().then((body) => {
+                        if (!response.ok) {
+                            throw new Error(body || 'Unable to load this student record.');
+                        }
+                        return body;
+                    }))
+                    .then((html) => {
+                        $('#registrarRecordModalBody').html(html);
+                    })
+                    .catch((error) => {
+                        $('#registrarRecordModalBody').html(`<div class="alert alert-danger mb-0">${escapeHtml(error.message || 'Unable to load this student record.')}</div>`);
+                    });
             });
 
             $('#viewStudentLoadBtn').click(function () {
@@ -3378,6 +3523,14 @@ $result = $student->getAllStudents();
 
             }
 
+        }
+
+        function toggleSettings(event) {
+            event.preventDefault();
+            const menu = document.getElementById("settingsMenu");
+            const isOpening = menu.style.display === "none";
+            menu.style.display = isOpening ? "block" : "none";
+            event.currentTarget.setAttribute("aria-expanded", isOpening ? "true" : "false");
         }
 
     </script>

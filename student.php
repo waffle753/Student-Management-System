@@ -5,6 +5,7 @@ require_once __DIR__ . '/models/studentquery.php';
 require_once __DIR__ . '/models/CurriculumSubject.php';
 require_once __DIR__ . '/models/Semester.php';
 require_once __DIR__ . '/models/Section.php';
+require_once __DIR__ . '/models/Grade.php';
 $nationalityOptions = require __DIR__ . '/config/nationalities.php';
 
 $studentModel = new Student();
@@ -16,7 +17,9 @@ if (!$student) {
     exit;
 }
 
-$studentView = ($_GET['view'] ?? 'profile') === 'load' ? 'load' : 'profile';
+$studentView = in_array($_GET['view'] ?? 'profile', ['load', 'grades', 'manual'], true)
+    ? (string) $_GET['view']
+    : 'profile';
 $semesterModel = new Semester();
 $semesterResult = $semesterModel->getAllSemesters();
 $sectionResult = (new Section())->getAllSections();
@@ -46,6 +49,10 @@ $studentLoad = $studentView === 'load'
         (int) ($student['Section_ID'] ?? 0)
     )
     : null;
+$studentGradeResult = $studentView === 'grades'
+    ? (new Grade())->getGradesForStudent((int) $student['ID'])
+    : null;
+$studentGradeRows = $studentGradeResult ? $studentGradeResult->fetch_all(MYSQLI_ASSOC) : [];
 $yearLevelLabels = [
     '1' => '1st year',
     '2' => '2nd year',
@@ -164,6 +171,31 @@ if (($_GET['status'] ?? '') === 'success') {
         .student-load-table tfoot td {
             background: #f7f9fa;
         }
+
+        .student-grade-table {
+            min-width: 420px;
+            table-layout: fixed;
+            border-color: #d4dce3;
+        }
+
+        .student-grade-table th,
+        .student-grade-table td {
+            padding: .8rem 1rem;
+            vertical-align: middle;
+            border-color: #d4dce3;
+        }
+
+        .student-grade-table thead th {
+            background: #e9edf1;
+            color: #424b55;
+            font-weight: 700;
+        }
+
+        .student-grade-table .grade-value {
+            width: 25%;
+            text-align: center;
+            font-weight: 700;
+        }
     </style>
 </head>
 
@@ -230,6 +262,36 @@ if (($_GET['status'] ?? '') === 'success') {
                                 <p>View Study Load</p>
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a href="student.php?view=grades"
+                                class="nav-link <?= $studentView === 'grades' ? 'active' : '' ?>" <?= $studentView === 'grades' ? 'aria-current="page"' : '' ?>>
+                                <i class="nav-icon fas fa-star" aria-hidden="true"></i>
+                                <p>View Grades</p>
+                            </a>
+                        </li>
+                        <li class="nav-item <?= $studentView === 'manual' ? 'menu-open' : '' ?>">
+                            <a href="#" class="nav-link" onclick="toggleStudentSettings(event)" aria-expanded="<?= $studentView === 'manual' ? 'true' : 'false' ?>">
+                                <i class="nav-icon fas fa-cog" aria-hidden="true"></i>
+                                <p>Settings<i class="right fas fa-angle-left"></i></p>
+                            </a>
+                            <ul id="studentSettingsMenu" class="nav nav-treeview" style="display: <?= $studentView === 'manual' ? 'block' : 'none' ?>;">
+                                <li class="nav-item">
+                                    <a href="student.php?view=manual" class="nav-link <?= $studentView === 'manual' ? 'active' : '' ?>" <?= $studentView === 'manual' ? 'aria-current="page"' : '' ?>>
+                                        <i class="far fa-circle nav-icon" aria-hidden="true"></i>
+                                        <p>User Manual</p>
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <form method="post" action="logout.php" class="mb-0">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
+                                        <button type="submit" class="nav-link text-left w-100 border-0 bg-transparent">
+                                            <i class="far fa-circle nav-icon" aria-hidden="true"></i>
+                                            <p>Logout</p>
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
                     </ul>
                 </nav>
             </div>
@@ -238,7 +300,7 @@ if (($_GET['status'] ?? '') === 'success') {
         <div class="content-wrapper">
             <section class="content-header">
                 <div class="container-fluid">
-                    <h1 class="h3"><?= $studentView === 'load' ? 'My Student Load' : 'My Personal Information' ?></h1>
+                    <h1 class="h3"><?= $studentView === 'load' ? 'My Student Load' : ($studentView === 'grades' ? 'My Grades' : ($studentView === 'manual' ? 'User Manual' : 'My Personal Information')) ?></h1>
                 </div>
             </section>
 
@@ -535,7 +597,7 @@ if (($_GET['status'] ?? '') === 'success') {
                                 </form>
                             </div>
                         </div>
-                    <?php else: ?>
+                    <?php elseif ($studentView === 'load'): ?>
                         <div class="card card-outline card-success">
                             <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
                                 <h2 class="card-title">Current Subjects</h2>
@@ -655,6 +717,48 @@ if (($_GET['status'] ?? '') === 'success') {
                                 <?php endif; ?>
                             </div>
                         </div>
+                    <?php elseif ($studentView === 'grades'): ?>
+                        <div class="card card-outline card-success">
+                            <div class="card-header">
+                                <h2 class="card-title">My Grades</h2>
+                            </div>
+                            <div class="card-body p-0">
+                                <?php if ($studentGradeResult === false): ?>
+                                    <div class="alert alert-danger m-3" role="alert">
+                                        Your grades could not be loaded. Please try again later.
+                                    </div>
+                                <?php elseif (empty($studentGradeRows)): ?>
+                                    <div class="text-muted text-center py-5">
+                                        No grades have been posted yet.
+                                    </div>
+                                <?php else: ?>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-hover mb-0 student-grade-table">
+                                            <colgroup>
+                                                <col style="width: 75%">
+                                                <col style="width: 25%">
+                                            </colgroup>
+                                            <thead>
+                                                <tr>
+                                                    <th scope="col">Subject</th>
+                                                    <th scope="col" class="grade-value">Grade</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <?php foreach ($studentGradeRows as $gradeRow): ?>
+                                                    <tr>
+                                                        <td><?= htmlspecialchars((string) ($gradeRow['SubjectName'] ?? '')) ?></td>
+                                                        <td class="grade-value"><?= htmlspecialchars(number_format((float) $gradeRow['grade'], 2)) ?></td>
+                                                    </tr>
+                                                <?php endforeach; ?>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php else: ?>
+                        <?php include __DIR__ . '/view/user_manual.php'; ?>
                     <?php endif; ?>
                 </div>
             </section>
@@ -665,6 +769,14 @@ if (($_GET['status'] ?? '') === 'success') {
     <script src="adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="adminlte/dist/js/adminlte.min.js"></script>
     <script>
+        function toggleStudentSettings(event) {
+            event.preventDefault();
+            const menu = document.getElementById('studentSettingsMenu');
+            const isOpening = menu.style.display === 'none';
+            menu.style.display = isOpening ? 'block' : 'none';
+            event.currentTarget.setAttribute('aria-expanded', isOpening ? 'true' : 'false');
+        }
+
         function calculateAge() {
             const birthDate = document.getElementById('date_of_birth').value;
             const ageInput = document.getElementById('age');

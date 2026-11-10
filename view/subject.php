@@ -111,6 +111,7 @@ if ($subjects) {
                             </select>
                         </div>
                     </div>
+
                 </div>
             </div>
 
@@ -258,6 +259,7 @@ if ($subjects) {
                             <?php endfor; ?>
                         </select>
                     </div>
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>

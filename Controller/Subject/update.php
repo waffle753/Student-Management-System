@@ -20,7 +20,6 @@ if ($id <= 0 || $SubjectCode === '' || $SubjectName === '' || $Unit === false) {
     header("Location: ../../index.php?page=subject&status=error&title=Required+Field&message=Subject+code,+subject+name,+and+unit+are+required.");
     exit;
 }
-
 if ($subject->subjectExists($SubjectCode, $id)) {
     header("Location: ../../index.php?page=subject&status=error&title=Duplicate+Subject&message=This+subject+code+already+exists.");
     exit;

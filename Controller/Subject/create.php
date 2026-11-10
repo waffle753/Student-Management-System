@@ -17,7 +17,6 @@ if ($SubjectCode === '' || $SubjectName === '' || $Unit === false) {
     header("Location: ../../index.php?page=subject&status=error&title=Required+Field&message=Subject+code,+subject+name,+and+unit+are+required.");
     exit;
 }
-
 $subject = new Subject();
 
 if ($subject->subjectExists($SubjectCode)) {

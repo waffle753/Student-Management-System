@@ -3,6 +3,7 @@ require_once __DIR__ . "/../config/auth.php";
 include_once __DIR__ . "/../models/Department.php";
 include_once __DIR__ . "/../models/Programs.php";
 include_once __DIR__ . "/../models/ClassSchedule.php";
+include_once __DIR__ . "/../models/Grade.php";
 requireStaffLogin();
 requireRolePermission('teacher');
 
@@ -89,6 +90,55 @@ foreach ($teacherSectionOptions as &$sections) {
     natcasesort($sections);
 }
 unset($sections);
+
+$teacherGradeClasses = [];
+$teacherGradesBySchedule = [];
+if ($teacherGradesOnly) {
+    $teacherGradesBySchedule = (new Grade())->getGradesForInstructor($teacherInstructorId);
+    if ($teacherGradesBySchedule === false) {
+        die("Unable to load saved grades for your classes.");
+    }
+}
+
+foreach ($teacherScheduleRows as $scheduleRow) {
+    $programName = (string) ($scheduleRow['Program_Name'] ?? '');
+    $yearLevel = (string) ($scheduleRow['Year_Level'] ?? '');
+    $sectionName = (string) ($scheduleRow['Section_Name'] ?? '');
+    $subjectCode = (string) ($scheduleRow['SubjectCode'] ?? '');
+    $subjectName = (string) ($scheduleRow['SubjectName'] ?? '');
+    $classKey = implode('|', [$programName, $yearLevel, $sectionName, $subjectCode]);
+
+    if (!isset($teacherGradeClasses[$classKey])) {
+        $teacherGradeClasses[$classKey] = [
+            'schedule_id' => (int) ($scheduleRow['id'] ?? 0),
+            'program' => $programName,
+            'year' => $yearLevel,
+            'section' => $sectionName,
+            'subject_code' => $subjectCode,
+            'subject' => $subjectName,
+            'students' => [],
+        ];
+    }
+}
+
+foreach ($teacherGradeClasses as $classKey => &$classData) {
+    $classData['students'] = array_values(array_filter($teacherStudentRows, function ($studentRow) use ($classData) {
+        return ((string) ($studentRow['Program_Name'] ?? '')) === $classData['program']
+            && ((string) ($studentRow['Year_Level'] ?? '')) === $classData['year']
+            && ((string) ($studentRow['Section_Name'] ?? '')) === $classData['section'];
+    }));
+
+    if (!$teacherGradesOnly) {
+        continue;
+    }
+
+    $classGrades = $teacherGradesBySchedule[$classData['schedule_id']] ?? [];
+    foreach ($classData['students'] as &$studentRow) {
+        $studentRow['Grade'] = $classGrades[(int) ($studentRow['ID'] ?? 0)] ?? '';
+    }
+    unset($studentRow);
+}
+unset($classData);
 ?>
 
 <style>
@@ -199,6 +249,11 @@ unset($sections);
         font-weight: 700;
     }
 
+    #my-classes .teacher-table th,
+    #my-classes .teacher-table td {
+        white-space: nowrap;
+    }
+
     .teacher-table tbody td {
         padding: 0.85rem 1rem;
         border-top: 1px solid #edf2f7;
@@ -216,6 +271,119 @@ unset($sections);
         padding: 1.75rem 1rem;
         color: #6b7280;
         text-align: center;
+    }
+
+    .teacher-grade-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 220px));
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .teacher-grade-class-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        aspect-ratio: 1 / 1;
+        width: 100%;
+        padding: 1rem;
+        border: 1px solid #dfe7f1;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #ffffff 0%, #f5f9ff 100%);
+        color: #1f2937;
+        text-align: left;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+    }
+
+    .teacher-grade-class-card:hover,
+    .teacher-grade-class-card.selected {
+        transform: translateY(-2px);
+        border-color: #7bb6ff;
+        background: linear-gradient(135deg, #f3f9ff 0%, #eaf4ff 100%);
+        box-shadow: 0 8px 18px rgba(59, 130, 246, 0.10);
+    }
+
+    .teacher-grade-class-subject {
+        margin: 0;
+        color: #1f2937;
+        font-size: 1.1rem;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .teacher-grade-class-meta {
+        display: grid;
+        gap: 0.35rem;
+        margin-top: 0.75rem;
+        color: #4b5563;
+        font-size: 0.9rem;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    @media (max-width: 991.98px) {
+        .teacher-grade-grid {
+            grid-template-columns: repeat(2, minmax(0, 220px));
+        }
+    }
+
+    @media (max-width: 575.98px) {
+        .teacher-grade-grid {
+            grid-template-columns: minmax(0, 220px);
+        }
+    }
+
+    .teacher-grade-student-panel {
+        border: 1px solid #e5e7eb;
+        border-radius: 16px;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .teacher-grade-student-panel-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid #edf2f7;
+        background: #f8fafc;
+        color: #1f2937;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .teacher-grade-student-table {
+        margin: 0;
+        width: 100%;
+    }
+
+    .teacher-grade-student-table th,
+    .teacher-grade-student-table td {
+        padding: 0.8rem 1rem;
+        border-bottom: 1px solid #edf2f7;
+        vertical-align: middle;
+    }
+
+    .teacher-grade-student-table th {
+        background: #f8fafc;
+        color: #374151;
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .teacher-grade-input {
+        width: 110px;
+        padding: 0.45rem 0.65rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 10px;
+        background: #fff;
+        color: #1f2937;
+    }
+
+    .teacher-grade-input:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.12);
+        outline: none;
     }
 
     .teacher-empty-state i {
@@ -510,8 +678,35 @@ unset($sections);
                 <header class="teacher-panel-header">
                     <h2><i class="fas fa-star mr-2 text-primary" aria-hidden="true"></i>Grades</h2>
                 </header>
-                <div class="teacher-panel-body teacher-empty-state">
-                    Grade management is not available yet.
+                <div class="teacher-panel-body">
+                    <?php if (!empty($teacherGradeClasses)): ?>
+                        <div class="teacher-grade-grid" aria-label="Class selection for grades">
+                            <?php foreach ($teacherGradeClasses as $classKey => $classData): ?>
+                                <button
+                                    type="button"
+                                    class="teacher-grade-class-card"
+                                    data-schedule-id="<?= (int) $classData['schedule_id'] ?>"
+                                    data-class-key="<?= htmlspecialchars((string) $classKey, ENT_QUOTES, 'UTF-8') ?>"
+                                    data-section="<?= htmlspecialchars((string) $classData['section'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-subject="<?= htmlspecialchars((string) $classData['subject'], ENT_QUOTES, 'UTF-8') ?>"
+                                    data-students='<?= htmlspecialchars(json_encode($classData['students'], JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_SLASHES), ENT_QUOTES, 'UTF-8') ?>'>
+                                    <p class="teacher-grade-class-subject"><?= htmlspecialchars((string) $classData['subject']) ?></p>
+                                    <div class="teacher-grade-class-meta">
+                                        <span><?= htmlspecialchars((string) $classData['program']) ?></span>
+                                        <span>Year Level: <?= htmlspecialchars((string) $classData['year']) ?></span>
+                                        <span>Section: <?= htmlspecialchars((string) $classData['section']) ?></span>
+                                    </div>
+                                </button>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <div class="teacher-grade-student-panel" id="teacherGradeStudentPanel" data-csrf-token="<?= htmlspecialchars(getCsrfToken(), ENT_QUOTES, 'UTF-8') ?>">
+                            <div class="teacher-grade-student-panel-header">Select a section and subject to view students</div>
+                            <div class="teacher-empty-state">Click a square above to enter grades for that class.</div>
+                        </div>
+                    <?php else: ?>
+                        <div class="teacher-empty-state">No class assignments are available for grading yet.</div>
+                    <?php endif; ?>
                 </div>
             </article>
         </div>
@@ -570,6 +765,89 @@ document.addEventListener('DOMContentLoaded', function () {
     $('#teacherPrintClasses').on('click', function () {
         window.print();
     });
+
+    $('.teacher-grade-class-card').on('click', function () {
+        const $card = $(this);
+        const section = $card.data('section');
+        const subject = $card.data('subject');
+        const scheduleId = Number($card.data('schedule-id'));
+        const students = $card.data('students') || [];
+
+        $('.teacher-grade-class-card').removeClass('selected');
+        $card.addClass('selected');
+
+        const $panel = $('#teacherGradeStudentPanel');
+        const escapeHtml = function (value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+                return {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;'
+                }[character];
+            });
+        };
+
+        if (!students.length) {
+            $panel.html('<div class="teacher-empty-state">No students are assigned to this section yet.</div>');
+            return;
+        }
+
+        const rows = students.map(function (student) {
+            const studentId = student.Student_Number || student['Student_Number'] || '';
+            const studentRecordId = Number(student.ID || 0);
+            const firstName = student.First_Name || student['First_Name'] || '';
+            const lastName = student.Last_Name || student['Last_Name'] || '';
+            const middleName = student.Middle_Name || student['Middle_Name'] || '';
+            const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
+            const grade = student.Grade == null ? '' : student.Grade;
+
+            return '<tr>' +
+                '<td>' + escapeHtml(studentId || '—') + '</td>' +
+                '<td>' + escapeHtml(fullName) + '</td>' +
+                '<td><input type="number" class="teacher-grade-input" name="grades[' + studentRecordId + ']" min="1" max="5" step="0.01" placeholder="1.00-5.00" value="' + escapeHtml(grade) + '" aria-label="Grade from 1.00 to 5.00 for ' + escapeHtml(fullName || 'student') + '"></td>' +
+                '</tr>';
+        }).join('');
+
+        $panel.html(
+            '<div class="teacher-grade-student-panel-header">' + escapeHtml(subject) + ' · Section ' + escapeHtml(section) + '</div>' +
+            '<form method="post" action="Controller/Teacher/save-grades.php">' +
+            '<input type="hidden" name="csrf_token" value="' + escapeHtml($panel.data('csrf-token')) + '">' +
+            '<input type="hidden" name="schedule_id" value="' + scheduleId + '">' +
+            '<div class="table-responsive">' +
+            '<table class="teacher-grade-student-table">' +
+            '<thead><tr><th>Student ID</th><th>Student Name</th><th>Grade (1.00-5.00)</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+            '</div>' +
+            '<div class="p-3"><small class="d-block text-muted mb-2">1.00 is highest; 3.00 or lower is passing.</small><button type="submit" class="btn btn-primary btn-sm">Save grades</button></div>' +
+            '</form>'
+        );
+    });
+
+    const savedScheduleId = Number(new URLSearchParams(window.location.search).get('schedule_id'));
+    if (savedScheduleId > 0) {
+        $('.teacher-grade-class-card').filter(function () {
+            return Number($(this).data('schedule-id')) === savedScheduleId;
+        }).first().trigger('click');
+    }
+
+    const gradeSaveStatus = <?= json_encode((string) ($_GET['status'] ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+    if (gradeSaveStatus === 'grades_saved' || gradeSaveStatus === 'grades_error') {
+        Swal.fire({
+            icon: gradeSaveStatus === 'grades_saved' ? 'success' : 'error',
+            title: gradeSaveStatus === 'grades_saved' ? 'Grades saved' : 'Unable to save grades',
+            text: gradeSaveStatus === 'grades_saved'
+                ? 'Student grades have been saved successfully.'
+                : 'Grades could not be saved. Please try again.',
+            confirmButtonText: 'OK'
+        }).then(function () {
+            const url = new URL(window.location.href);
+            url.searchParams.delete('status');
+            window.history.replaceState({}, document.title, url.pathname + url.search + url.hash);
+        });
+    }
 
     $('#teacher_student_filter_program').on('change', function () {
         const selectedProgram = this.value;
