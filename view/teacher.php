@@ -456,57 +456,79 @@ unset($classData);
     }
 </style>
 
+<?php if (!$teacherStudentsOnly && !$teacherClassesOnly && !$teacherGradesOnly): ?>
+<section class="content-header">
+    <div class="container-fluid">
+        <h1 class="h3">Teacher Dashboard</h1>
+        <p class="text-muted mb-0">Welcome, <?= htmlspecialchars($_SESSION['username'] ?? 'Teacher', ENT_QUOTES, 'UTF-8') ?>. Your assigned students and classes at a glance.</p>
+    </div>
+</section>
+
+<section class="content">
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-lg-4 col-md-6">
+                <div class="small-box bg-info">
+                    <div class="inner">
+                        <h3><?= number_format($teacherStudentCount) ?></h3>
+                        <p>Students</p>
+                    </div>
+                    <div class="icon"><i class="fas fa-user-graduate" aria-hidden="true"></i></div>
+                    <a href="index.php?page=teacher_students" class="small-box-footer">View students <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <div class="small-box bg-success">
+                    <div class="inner">
+                        <h3><?= number_format($teacherClassCount) ?></h3>
+                        <p>My Classes</p>
+                    </div>
+                    <div class="icon"><i class="fas fa-chalkboard" aria-hidden="true"></i></div>
+                    <a href="index.php?page=teacher_classes" class="small-box-footer">View classes <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                </div>
+            </div>
+            <div class="col-lg-4 col-md-6">
+                <div class="small-box bg-warning">
+                    <div class="inner">
+                        <h3><?= number_format($teacherTodayClassCount) ?></h3>
+                        <p>Today's Classes</p>
+                    </div>
+                    <div class="icon"><i class="fas fa-calendar-day" aria-hidden="true"></i></div>
+                    <a href="index.php?page=teacher_classes" class="small-box-footer">View today's schedule <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                </div>
+            </div>
+        </div>
+
+        <section aria-labelledby="teacherWorkAreasHeading">
+            <h2 id="teacherWorkAreasHeading" class="h5 mb-3">Work Areas</h2>
+            <div class="row">
+                <div class="col-md-4 col-sm-6 mb-2">
+                    <a class="btn btn-default btn-block text-left" href="index.php?page=teacher_students">
+                        <i class="fas fa-user-graduate mr-2 text-primary" aria-hidden="true"></i>My Students
+                    </a>
+                </div>
+                <div class="col-md-4 col-sm-6 mb-2">
+                    <a class="btn btn-default btn-block text-left" href="index.php?page=teacher_classes">
+                        <i class="fas fa-chalkboard mr-2 text-primary" aria-hidden="true"></i>My Classes
+                    </a>
+                </div>
+                <div class="col-md-4 col-sm-6 mb-2">
+                    <a class="btn btn-default btn-block text-left" href="index.php?page=teacher_grades">
+                        <i class="fas fa-star mr-2 text-primary" aria-hidden="true"></i>Grades
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+</section>
+<?php else: ?>
 <main class="teacher-dashboard">
     <header class="teacher-dashboard-header">
         <div>
-            <h1><?= $teacherStudentsOnly ? 'My Students' : ($teacherClassesOnly ? 'My Classes' : ($teacherGradesOnly ? 'Grades' : 'Dashboard')) ?></h1>
-            <p>
-                <?php if ($teacherStudentsOnly): ?>
-                    Students assigned to your classes.
-                <?php elseif ($teacherClassesOnly): ?>
-                    Subjects assigned to your classes.
-                <?php elseif ($teacherGradesOnly): ?>
-                    Grade management.
-                <?php else: ?>
-                    Welcome, <?= htmlspecialchars($_SESSION['username'] ?? 'Teacher') ?>. Here's your academic overview.
-                <?php endif; ?>
-            </p>
+            <h1><?= $teacherStudentsOnly ? 'My Students' : ($teacherClassesOnly ? 'My Classes' : 'Grades') ?></h1>
+            <p><?= $teacherStudentsOnly ? 'Students assigned to your classes.' : ($teacherClassesOnly ? 'Subjects assigned to your classes.' : 'Grade management.') ?></p>
         </div>
-        <span class="badge badge-light p-2"><?= htmlspecialchars(date('l, F j, Y')) ?></span>
     </header>
-
-    <?php if (!$teacherStudentsOnly && !$teacherClassesOnly && !$teacherGradesOnly): ?>
-    <section class="row" aria-label="Dashboard summary">
-        <div class="col-xl-4 col-md-6 mb-3">
-            <article class="teacher-stat-card">
-                <div class="teacher-stat-icon"><i class="fas fa-user-graduate" aria-hidden="true"></i></div>
-                <div>
-                    <div class="teacher-stat-label">Students</div>
-                    <p class="teacher-stat-value"><?= number_format($teacherStudentCount) ?></p>
-                </div>
-            </article>
-        </div>
-        <div class="col-xl-4 col-md-6 mb-3">
-            <article class="teacher-stat-card">
-                <div class="teacher-stat-icon"><i class="fas fa-chalkboard" aria-hidden="true"></i></div>
-                <div>
-                    <div class="teacher-stat-label">My Classes</div>
-                    <p class="teacher-stat-value"><?= number_format($teacherClassCount) ?></p>
-                </div>
-            </article>
-        </div>
-        <div class="col-xl-4 col-md-6 mb-3">
-            <article class="teacher-stat-card">
-                <div class="teacher-stat-icon"><i class="fas fa-calendar-day" aria-hidden="true"></i></div>
-                <div>
-                    <div class="teacher-stat-label">Today's Classes</div>
-                    <p class="teacher-stat-value"><?= number_format($teacherTodayClassCount) ?></p>
-                </div>
-            </article>
-        </div>
-    </section>
-    <?php endif; ?>
-
     <section class="row">
         <?php if ($teacherStudentsOnly): ?>
         <div class="col-12 mb-3">
@@ -561,7 +583,7 @@ unset($classData);
                         </div>
                     </div>
                     <div class="table-responsive">
-                        <table class="table teacher-table">
+                        <table id="teacherStudentTable" class="table teacher-table">
                             <thead>
                                 <tr>
                                     <th scope="col">Student ID</th>
@@ -575,46 +597,37 @@ unset($classData);
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php if ($teacherStudentCount > 0): ?>
-                                    <?php foreach ($teacherStudentRows as $studentRow): ?>
-                                        <tr
-                                            data-department="<?= htmlspecialchars((string) ($studentRow['Department'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                            data-program="<?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                            data-section="<?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                            data-year="<?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                                            <td><?= htmlspecialchars((string) $studentRow['Student_Number']) ?></td>
-                                            <td><?= htmlspecialchars((string) $studentRow['First_Name']) ?></td>
-                                            <td><?= htmlspecialchars((string) ($studentRow['Middle_Name'] ?? '')) ?></td>
-                                            <td><?= htmlspecialchars((string) $studentRow['Last_Name']) ?></td>
-                                            <td><?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? '')) ?></td>
-                                            <td><?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? '')) ?></td>
-                                            <td><?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? '')) ?></td>
-                                            <td>
-                                                <button
-                                                    type="button"
-                                                    class="btn btn-secondary btn-sm teacher-view-student"
-                                                    data-toggle="modal"
-                                                    data-target="#teacherStudentViewModal"
-                                                    data-student-id="<?= htmlspecialchars((string) $studentRow['Student_Number'], ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-first-name="<?= htmlspecialchars((string) $studentRow['First_Name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-middle-name="<?= htmlspecialchars((string) ($studentRow['Middle_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-last-name="<?= htmlspecialchars((string) $studentRow['Last_Name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-program="<?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-section="<?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-year="<?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                                                    <i class="fas fa-eye" aria-hidden="true"></i> View
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                    <tr class="teacher-no-filter-results" hidden>
-                                        <td colspan="8" class="teacher-empty-state">No students match the selected filters.</td>
+                                <?php foreach ($teacherStudentRows as $studentRow): ?>
+                                    <tr
+                                        data-department="<?= htmlspecialchars((string) ($studentRow['Department'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        data-program="<?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        data-section="<?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                        data-year="<?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                        <td><?= htmlspecialchars((string) $studentRow['Student_Number']) ?></td>
+                                        <td><?= htmlspecialchars((string) $studentRow['First_Name']) ?></td>
+                                        <td><?= htmlspecialchars((string) ($studentRow['Middle_Name'] ?? '')) ?></td>
+                                        <td><?= htmlspecialchars((string) $studentRow['Last_Name']) ?></td>
+                                        <td><?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? '')) ?></td>
+                                        <td><?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? '')) ?></td>
+                                        <td><?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? '')) ?></td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                class="btn btn-secondary btn-sm teacher-view-student"
+                                                data-toggle="modal"
+                                                data-target="#teacherStudentViewModal"
+                                                data-student-id="<?= htmlspecialchars((string) $studentRow['Student_Number'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-first-name="<?= htmlspecialchars((string) $studentRow['First_Name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-middle-name="<?= htmlspecialchars((string) ($studentRow['Middle_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-last-name="<?= htmlspecialchars((string) $studentRow['Last_Name'], ENT_QUOTES, 'UTF-8') ?>"
+                                                data-program="<?= htmlspecialchars((string) ($studentRow['Program_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-section="<?= htmlspecialchars((string) ($studentRow['Section_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                data-year="<?= htmlspecialchars((string) ($studentRow['Year_Level'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                <i class="fas fa-eye" aria-hidden="true"></i> View
+                                            </button>
+                                        </td>
                                     </tr>
-                                <?php else: ?>
-                                    <tr>
-                                        <td colspan="8" class="teacher-empty-state">No students are assigned to your classes.</td>
-                                    </tr>
-                                <?php endif; ?>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
@@ -713,6 +726,7 @@ unset($classData);
         <?php endif; ?>
     </section>
 </main>
+<?php endif; ?>
 
 <div class="modal fade" id="teacherStudentViewModal" tabindex="-1" role="dialog" aria-labelledby="teacherStudentViewTitle" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -849,6 +863,47 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    let teacherStudentsDataTable = null;
+    const teacherStudentTable = document.getElementById('teacherStudentTable');
+    if (teacherStudentTable) {
+        $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+            if (settings.nTable.id !== 'teacherStudentTable') {
+                return true;
+            }
+
+            const row = settings.aoData[dataIndex].nTr;
+            const filters = {};
+            $('.teacher-student-filter').each(function () {
+                const selectedOption = this.options[this.selectedIndex];
+                filters[this.dataset.filter] = this.dataset.filter === 'section'
+                    ? {
+                        section: selectedOption.dataset.section || '',
+                        program: selectedOption.dataset.program || ''
+                    }
+                    : this.value;
+            });
+
+            return (!filters.department || row.dataset.department === filters.department) &&
+                (!filters.program || row.dataset.program === filters.program) &&
+                (!filters.year || row.dataset.year === filters.year) &&
+                (!filters.section.section || row.dataset.section === filters.section.section) &&
+                (!filters.section.program || row.dataset.program === filters.section.program);
+        });
+
+        teacherStudentsDataTable = $('#teacherStudentTable').DataTable({
+            autoWidth: false,
+            pageLength: 10,
+            lengthChange: true,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            order: [[0, 'asc']],
+            dom: '<"top"lf>t<"bottom"ip>',
+            language: {
+                emptyTable: 'No students are assigned to your classes.',
+                zeroRecords: 'No students match the search or selected filters.'
+            }
+        });
+    }
+
     $('#teacher_student_filter_program').on('change', function () {
         const selectedProgram = this.value;
         const $sectionFilter = $('#teacher_student_filter_section');
@@ -873,28 +928,9 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     function applyTeacherStudentFilters() {
-        const filters = {};
-        $('.teacher-student-filter').each(function () {
-            const filter = this.dataset.filter;
-            const selectedOption = this.options[this.selectedIndex];
-            filters[filter] = filter === 'section'
-                ? (selectedOption.dataset.section || '')
-                : this.value;
-        });
-
-        let visibleCount = 0;
-        $('#my-student tbody tr[data-department]').each(function () {
-            const row = this;
-            const matches = Object.keys(filters).every(function (filter) {
-                return !filters[filter] || row.dataset[filter] === filters[filter];
-            });
-            row.hidden = !matches;
-            if (matches) {
-                visibleCount += 1;
-            }
-        });
-
-        $('.teacher-no-filter-results').prop('hidden', visibleCount > 0);
+        if (teacherStudentsDataTable) {
+            teacherStudentsDataTable.draw();
+        }
     }
 
     $('#teacherApplyStudentFilters').on('click', applyTeacherStudentFilters);
@@ -906,6 +942,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     $('#teacherExportStudentsCsv').on('click', function () {
         applyTeacherStudentFilters();
+        if (!teacherStudentsDataTable) {
+            return;
+        }
 
         const headers = ['Student ID', 'First Name', 'Middle Name', 'Last Name', 'Program', 'Section', 'Year'];
         const csvEscape = function (value) {
@@ -917,12 +956,8 @@ document.addEventListener('DOMContentLoaded', function () {
         };
         const rows = [headers.map(csvEscape).join(',')];
 
-        $('#my-student tbody tr[data-department]').each(function () {
-            if (this.hidden) {
-                return;
-            }
-
-            const values = Array.from(this.cells)
+        teacherStudentsDataTable.rows({ search: 'applied' }).nodes().toArray().forEach(function (row) {
+            const values = Array.from(row.cells)
                 .slice(0, headers.length)
                 .map(function (cell) { return cell.textContent; });
             rows.push(values.map(csvEscape).join(','));

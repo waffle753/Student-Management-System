@@ -15,7 +15,7 @@ class Grade
     public function getGradesForStudent($studentId)
     {
         $stmt = $this->conn->prepare(
-            "SELECT grade_record.grade, grade_record.updated_at,
+            "SELECT schedule.id AS class_schedule_id, grade_record.grade, grade_record.updated_at,
                     subject_record.SubjectCode, subject_record.SubjectName,
                     program_record.CourseName AS Program_Name,
                     curriculum.year_level AS Year_Level,
@@ -48,6 +48,73 @@ class Grade
         $stmt->close();
 
         return $grades;
+    }
+
+    public function updateStudentGrades($studentId, array $grades)
+    {
+        if ($studentId < 1 || $grades === [] || !$this->conn->begin_transaction()) {
+            return false;
+        }
+
+        $checkStmt = $this->conn->prepare(
+            "SELECT id FROM student_grades
+             WHERE student_id = ? AND class_schedule_id = ?
+             LIMIT 1 FOR UPDATE"
+        );
+        $updateStmt = $this->conn->prepare(
+            "UPDATE student_grades
+             SET grade = ?
+             WHERE student_id = ? AND class_schedule_id = ?"
+        );
+        if (!$checkStmt || !$updateStmt) {
+            if ($checkStmt) {
+                $checkStmt->close();
+            }
+            if ($updateStmt) {
+                $updateStmt->close();
+            }
+            $this->conn->rollback();
+            return false;
+        }
+
+        foreach ($grades as $scheduleId => $gradeValue) {
+            $checkStmt->bind_param("ii", $studentId, $scheduleId);
+            if (!$checkStmt->execute()) {
+                $checkStmt->close();
+                $updateStmt->close();
+                $this->conn->rollback();
+                return false;
+            }
+
+            $gradeRecord = $checkStmt->get_result();
+            $recordExists = $gradeRecord && $gradeRecord->num_rows === 1;
+            if ($gradeRecord) {
+                $gradeRecord->free();
+            }
+            if (!$recordExists) {
+                $checkStmt->close();
+                $updateStmt->close();
+                $this->conn->rollback();
+                return false;
+            }
+
+            $updateStmt->bind_param("dii", $gradeValue, $studentId, $scheduleId);
+            if (!$updateStmt->execute()) {
+                $checkStmt->close();
+                $updateStmt->close();
+                $this->conn->rollback();
+                return false;
+            }
+        }
+
+        $checkStmt->close();
+        $updateStmt->close();
+        if (!$this->conn->commit()) {
+            $this->conn->rollback();
+            return false;
+        }
+
+        return true;
     }
 
     public function getGradesForInstructor($instructorId)

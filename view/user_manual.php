@@ -7,6 +7,23 @@ if ($manualRole === 'student') {
     $manualTitle = 'Student Portal User Manual';
     $manualSections = [
         [
+            'title' => 'Dashboard',
+            'purpose' => 'See your current academic placement and a summary of your study load and posted grades.',
+            'fields' => [
+                ['Current Subjects', 'Number of subjects scheduled for your current program, year, semester, and section.'],
+                ['Grades Posted', 'Number of grades posted for your student record.'],
+                ['Grades Pending', 'Number of current scheduled subjects that do not yet have a posted grade.'],
+                ['Academic Placement', 'Your program, year level, section, semester, and academic year.'],
+                ['Student Services', 'Shortcuts to your study load, grades, and personal information.'],
+            ],
+            'workflow' => [
+                'Open Dashboard from the Student sidebar after signing in.',
+                'Review your academic placement and current subject and grade counts.',
+                'Choose a student service to open its details.',
+            ],
+            'table' => [],
+        ],
+        [
             'title' => 'Personal Information',
             'purpose' => 'Review your student record and update the personal and emergency-contact details that the portal allows you to edit.',
             'fields' => [
@@ -46,11 +63,13 @@ if ($manualRole === 'student') {
                 ['Section', 'Shows the section assigned to the scheduled subject.'],
                 ['Time, Days, Room', 'Show when and where the class meets. TBA means no value has been assigned.'],
                 ['Instructor', 'Shows the assigned instructor, or TBA if one has not been assigned.'],
+                ['Print', 'Opens the browser print dialog for your study load.'],
             ],
             'workflow' => [
                 'Choose View Study Load in the sidebar.',
                 'Check the academic placement summary above the table.',
                 'Use the subject rows to review units, meeting times, room, and instructor. On a narrow screen, scroll the table horizontally.',
+                'Choose Print to print or save a copy of the study load.',
             ],
             'table' => ['Subject Code', 'Subject', 'Units', 'Section', 'Time', 'Days', 'Room', 'Instructor'],
         ],
@@ -58,9 +77,10 @@ if ($manualRole === 'student') {
             'title' => 'View Grades',
             'purpose' => 'Review grades that instructors have saved for your subjects.',
             'fields' => [
-                ['Subject', 'The subject for which a grade was posted.'],
-                ['Grade', 'The posted grade on the school’s 1.00–5.00 scale. A grade of 3.00 or lower is passing.'],
-                ['No grades message', 'Appears when instructors have not posted any grades yet.'],
+                ['Subject', 'A subject on your current study load or with a previously posted grade.'],
+                ['Grade', 'The posted grade on the school’s 1.00–5.00 scale. A blank cell means the instructor has not posted a grade yet. A grade of 3.00 or lower is passing.'],
+                ['Average Grade', 'The average is shown only after every listed subject has a posted grade.'],
+                ['No grades message', 'Appears when there are no scheduled subjects or posted grades to display.'],
             ],
             'workflow' => [
                 'Choose View Grades in the sidebar.',
@@ -80,8 +100,12 @@ if ($manualRole === 'student') {
                 ['Students', 'Count of students associated with your assigned classes.'],
                 ['My Classes', 'Count of class schedules assigned to you.'],
                 ["Today's Classes", 'Count of your schedules that match today’s day.'],
+                ['Work Areas', 'Shortcuts to My Students, My Classes, and Grades.'],
             ],
-            'workflow' => ['Use the sidebar to open My Student, My Classes, or Grades for detailed work.'],
+            'workflow' => [
+                'Review the summary boxes for your assigned students, classes, and today’s classes.',
+                'Choose a Work Areas shortcut or use the sidebar to open My Students, My Classes, or Grades.',
+            ],
             'table' => [],
         ],
         [
@@ -91,6 +115,8 @@ if ($manualRole === 'student') {
                 ['Department, Program, Section, Year filters', 'Narrow the student list. Choose All to remove a filter.'],
                 ['Filter', 'Apply the selected filters.'],
                 ['Reset', 'Clear all selected filters and show all assigned students.'],
+                ['Global Search', 'Search all visible student columns.'],
+                ['Rows per page and pagination', 'Choose how many students to show on each page and move between result pages.'],
                 ['Export CSV', 'Download the currently filtered student rows as a CSV file.'],
                 ['Action / View', 'Open the student information dialog.'],
             ],
@@ -140,6 +166,23 @@ if ($manualRole === 'student') {
         : ($isAdministratorRole
             ? 'Administrator User Manual'
             : $roleDisplayName . ' User Manual');
+    if ($isAdministratorRole || $manualRole === 'registrar') {
+        $manualSections[] = [
+            'title' => 'Dashboard',
+            'purpose' => 'Review high-level student and academic setup counts, then open an available work area.',
+            'fields' => [
+                ['Active Students', 'Number of student records marked active in the system.'],
+                ['Programs, Sections, Class Schedules', 'Counts of the corresponding academic setup records.'],
+                ['Work Areas', 'Shortcuts appear only for pages your role is allowed to access.'],
+            ],
+            'workflow' => [
+                'Open Dashboard from the sidebar after signing in.',
+                'Review the summary counts.',
+                'Choose a work area shortcut or use the sidebar to continue.',
+            ],
+            'table' => [],
+        ];
+    }
     $manualModules = [
         'students' => [
             'Students',
@@ -154,7 +197,10 @@ if ($manualRole === 'student') {
                 ['Program/Course, Year Level, Section', 'Academic program and cohort assignment. Select the program and year before choosing a matching section.'],
                 ['School Year, Semester, Department, Current GPA / Grade', 'Academic period, organizational placement, and optional grade summary.'],
                 ['Emergency first/middle/last name, contact number, address, email', 'Optional emergency contact details.'],
-                ['Registrar Subjects and Grades actions', 'Subjects shows scheduled classes for the student’s current program, year, semester, and section. Grades shows grades posted by instructors. These actions are read-only.'],
+                ['Global Search', 'Search across the student table columns.'],
+                ['Registrar filters', 'Filter the student list by department, program/course, year level, and section. Choose Filter to apply or Reset to clear them.'],
+                ['Export CSV', 'Registrars can download the rows matching the current dropdown filters and global search. The export contains student and academic details, not contact or emergency information.'],
+                ['Subjects and Grades actions', 'Open the student’s scheduled subjects or posted grades. Both views can be printed. Administrators can edit posted grades; Registrars can view but not edit them. Subject schedules are read-only in these views.'],
             ],
             ['Student ID', 'Name', 'Program', 'Section', 'Year', 'Actions'],
         ],
@@ -292,6 +338,63 @@ if ($manualRole === 'student') {
 }
 ?>
 
+<style>
+    .manual-section {
+        overflow: hidden;
+    }
+
+    .manual-section > summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .manual-section > summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .manual-section > summary::after {
+        width: .5rem;
+        height: .5rem;
+        margin-left: 1rem;
+        border-right: 2px solid currentColor;
+        border-bottom: 2px solid currentColor;
+        content: '';
+        transform: rotate(45deg);
+        transition: transform 220ms ease;
+        flex: 0 0 auto;
+    }
+
+    .manual-section[open] > summary::after {
+        transform: rotate(225deg);
+    }
+
+    @supports (interpolate-size: allow-keywords) {
+        .manual-section {
+            interpolate-size: allow-keywords;
+        }
+
+        .manual-section::details-content {
+            block-size: 0;
+            overflow: clip;
+            transition: block-size 220ms ease, content-visibility 220ms allow-discrete;
+        }
+
+        .manual-section[open]::details-content {
+            block-size: auto;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .manual-section > summary::after,
+        .manual-section::details-content {
+            transition: none;
+        }
+    }
+</style>
+
 <section class="content-header">
     <div class="container-fluid">
         <h1 class="h3"><?= htmlspecialchars($manualTitle, ENT_QUOTES, 'UTF-8') ?></h1>
@@ -312,10 +415,10 @@ if ($manualRole === 'student') {
             </div>
         <?php else: ?>
             <?php foreach ($manualSections as $section): ?>
-                <article class="card card-outline card-primary">
-                    <div class="card-header">
+                <details class="card card-outline card-primary manual-section">
+                    <summary class="card-header">
                         <h2 class="card-title font-weight-bold"><?= htmlspecialchars($section['title'], ENT_QUOTES, 'UTF-8') ?></h2>
-                    </div>
+                    </summary>
                     <div class="card-body">
                         <p><?= htmlspecialchars($section['purpose'], ENT_QUOTES, 'UTF-8') ?></p>
                         <?php if ($section['fields'] !== []): ?>
@@ -347,7 +450,7 @@ if ($manualRole === 'student') {
                             <?php endforeach; ?>
                         </ol>
                     </div>
-                </article>
+                </details>
             <?php endforeach; ?>
         <?php endif; ?>
         <div class="alert alert-info">

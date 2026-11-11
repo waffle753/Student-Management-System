@@ -115,7 +115,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         )
     ) {
 
-        header("Location: index.php?updated=1");
+        header("Location: index.php?page=students&updated=1");
         exit;
 
     } else {

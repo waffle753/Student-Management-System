@@ -29,7 +29,7 @@ class CurriculumSubject
     public function getStudentLoad($courseName, $yearLevel = '', $semesterName = '', $semesterId = 0, $sectionId = 0)
     {
         $stmt = $this->conn->prepare(
-            "SELECT csub.id AS curriculum_subject_id, csub.year_level, csub.semester_id,
+            "SELECT csched.id AS class_schedule_id, csub.id AS curriculum_subject_id, csub.year_level, csub.semester_id,
                     sem.semester AS semester_name, s.id AS subject_id, s.SubjectCode, s.SubjectName, s.Unit,
                     section_record.section_name AS section,
                     COALESCE(TIME_FORMAT(csched.time_start, '%h:%i %p'), '') AS time_start,
@@ -47,7 +47,14 @@ class CurriculumSubject
                    AND section_record.year_level = csub.year_level
              INNER JOIN class_schedules csched
                     ON csched.curriculum_subject_id = csub.id
-                   AND csched.section_id = section_record.section_id
+                   AND (
+                        csched.section_id = section_record.section_id
+                        OR (
+                            csched.section_id IS NULL
+                            AND csched.section = section_record.section_name
+                            AND COALESCE(csched.program_id, csub.program_id) = section_record.program_id
+                        )
+                   )
              LEFT JOIN instructor i ON i.id = csched.instructor_id
              WHERE p.CourseName = ?
                AND ? <> ''

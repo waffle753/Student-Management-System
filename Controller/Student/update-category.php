@@ -17,6 +17,7 @@ function redirectCategoryStatus($status, $category = '')
     if (isStudentUser()) {
         $destination = 'student.php';
         $query = [
+            'view' => 'profile',
             'status' => $status === 'saved' ? 'success' : 'error',
             'category' => $category,
         ];

@@ -9,7 +9,7 @@ if (isset($_GET['id'])) {
 
     $student->deleteStudent($_GET['id']);
 
-    header("Location: index.php?deleted=1");
+    header("Location: index.php?page=students&deleted=1");
     exit;
 }
 ?>

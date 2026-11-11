@@ -17,9 +17,10 @@ if (!$student) {
     exit;
 }
 
-$studentView = in_array($_GET['view'] ?? 'profile', ['load', 'grades', 'manual'], true)
-    ? (string) $_GET['view']
-    : 'profile';
+$requestedStudentView = $_GET['view'] ?? 'dashboard';
+$studentView = in_array($requestedStudentView, ['dashboard', 'profile', 'load', 'grades', 'manual'], true)
+    ? (string) $requestedStudentView
+    : 'dashboard';
 $semesterModel = new Semester();
 $semesterResult = $semesterModel->getAllSemesters();
 $sectionResult = (new Section())->getAllSections();
@@ -40,7 +41,7 @@ if ($semesterResult) {
     }
 }
 $curriculumSubjectModel = new CurriculumSubject();
-$studentLoad = $studentView === 'load'
+$studentLoad = in_array($studentView, ['dashboard', 'load', 'grades'], true)
     ? $curriculumSubjectModel->getStudentLoad(
         $student['Course'],
         $student['Year_Level'] ?? '',
@@ -49,10 +50,60 @@ $studentLoad = $studentView === 'load'
         (int) ($student['Section_ID'] ?? 0)
     )
     : null;
-$studentGradeResult = $studentView === 'grades'
+$studentGradeResult = in_array($studentView, ['dashboard', 'grades'], true)
     ? (new Grade())->getGradesForStudent((int) $student['ID'])
     : null;
 $studentGradeRows = $studentGradeResult ? $studentGradeResult->fetch_all(MYSQLI_ASSOC) : [];
+$postedGradesBySchedule = [];
+foreach ($studentGradeRows as $gradeRow) {
+    $postedGradesBySchedule[(int) $gradeRow['class_schedule_id']] = $gradeRow;
+}
+if (in_array($studentView, ['dashboard', 'grades'], true) && $studentGradeResult !== false && is_array($studentLoad)) {
+    $currentScheduleIds = [];
+    $currentGradeRows = [];
+    foreach ($studentLoad['subjects'] as $subject) {
+        $scheduleId = (int) $subject['class_schedule_id'];
+        $currentScheduleIds[$scheduleId] = true;
+        $currentGradeRows[] = [
+            'class_schedule_id' => $scheduleId,
+            'SubjectCode' => $subject['SubjectCode'],
+            'SubjectName' => $subject['SubjectName'],
+            'grade' => $postedGradesBySchedule[$scheduleId]['grade'] ?? null,
+        ];
+    }
+    foreach ($studentGradeRows as $gradeRow) {
+        if (!isset($currentScheduleIds[(int) $gradeRow['class_schedule_id']])) {
+            $currentGradeRows[] = $gradeRow;
+        }
+    }
+    $studentGradeRows = $currentGradeRows;
+}
+$postedGradeValues = array_values(array_filter(
+    array_column($studentGradeRows, 'grade'),
+    static function ($grade) {
+        return $grade !== null;
+    }
+));
+$hasUnpostedGrade = count(array_filter(
+    $studentGradeRows,
+    static function ($gradeRow) {
+        return !isset($gradeRow['grade']) || trim((string) $gradeRow['grade']) === '';
+    }
+)) > 0;
+$studentGradeAverage = $studentGradeRows !== [] && !$hasUnpostedGrade
+    ? array_sum($postedGradeValues) / count($postedGradeValues)
+    : null;
+$studentCurrentSubjectCount = is_array($studentLoad) ? count($studentLoad['subjects']) : null;
+$studentPostedGradeCount = $studentGradeResult !== false ? count($postedGradesBySchedule) : null;
+$studentPendingGradeCount = null;
+if (is_array($studentLoad) && $studentGradeResult !== false) {
+    $studentPendingGradeCount = 0;
+    foreach ($studentLoad['subjects'] as $currentSubject) {
+        if (!isset($postedGradesBySchedule[(int) $currentSubject['class_schedule_id']])) {
+            $studentPendingGradeCount++;
+        }
+    }
+}
 $yearLevelLabels = [
     '1' => '1st year',
     '2' => '2nd year',
@@ -196,6 +247,50 @@ if (($_GET['status'] ?? '') === 'success') {
             text-align: center;
             font-weight: 700;
         }
+
+        @media print {
+            @page {
+                margin: 12mm;
+            }
+
+            body * {
+                visibility: hidden !important;
+            }
+
+            #studentLoadPrintArea,
+            #studentLoadPrintArea * {
+                visibility: visible !important;
+            }
+
+            #studentLoadPrintArea {
+                position: absolute !important;
+                top: 0;
+                left: 0;
+                width: 100%;
+                margin: 0 !important;
+                border: 0 !important;
+                box-shadow: none !important;
+            }
+
+            #studentLoadPrintArea .table-responsive {
+                overflow: visible !important;
+            }
+
+            #studentLoadPrintArea .student-load-table {
+                width: 100%;
+                min-width: 0;
+                font-size: 9pt;
+            }
+
+            #studentLoadPrintArea .student-load-table th,
+            #studentLoadPrintArea .student-load-table td {
+                padding: .35rem;
+            }
+
+            .student-load-print-button {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 
@@ -249,7 +344,14 @@ if (($_GET['status'] ?? '') === 'success') {
                     <ul class="nav nav-pills nav-sidebar flex-column" role="menu">
                         <li class="nav-header">STUDENT</li>
                         <li class="nav-item">
-                            <a href="student.php" class="nav-link <?= $studentView === 'profile' ? 'active' : '' ?>"
+                            <a href="student.php?view=dashboard" class="nav-link <?= $studentView === 'dashboard' ? 'active' : '' ?>"
+                                <?= $studentView === 'dashboard' ? 'aria-current="page"' : '' ?>>
+                                <i class="nav-icon fas fa-tachometer-alt" aria-hidden="true"></i>
+                                <p>Dashboard</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="student.php?view=profile" class="nav-link <?= $studentView === 'profile' ? 'active' : '' ?>"
                                 <?= $studentView === 'profile' ? 'aria-current="page"' : '' ?>>
                                 <i class="nav-icon fas fa-id-card" aria-hidden="true"></i>
                                 <p>Personal Information</p>
@@ -300,7 +402,7 @@ if (($_GET['status'] ?? '') === 'success') {
         <div class="content-wrapper">
             <section class="content-header">
                 <div class="container-fluid">
-                    <h1 class="h3"><?= $studentView === 'load' ? 'My Student Load' : ($studentView === 'grades' ? 'My Grades' : ($studentView === 'manual' ? 'User Manual' : 'My Personal Information')) ?></h1>
+                    <h1 class="h3"><?= $studentView === 'dashboard' ? 'Student Dashboard' : ($studentView === 'load' ? 'My Student Load' : ($studentView === 'grades' ? 'My Grades' : ($studentView === 'manual' ? 'User Manual' : 'My Personal Information'))) ?></h1>
                 </div>
             </section>
 
@@ -323,7 +425,76 @@ if (($_GET['status'] ?? '') === 'success') {
                         </script>
                     <?php endif; ?>
 
-                    <?php if ($studentView === 'profile'): ?>
+                    <?php if ($studentView === 'dashboard'): ?>
+                        <section class="mb-3">
+                            <h2 class="h5">Welcome, <?= htmlspecialchars((string) ($student['First_Name'] ?? 'Student'), ENT_QUOTES, 'UTF-8') ?></h2>
+                            <p class="text-muted mb-0">Your current academic information and student services.</p>
+                        </section>
+                        <div class="row">
+                            <div class="col-lg-4 col-md-6">
+                                <div class="small-box bg-info">
+                                    <div class="inner">
+                                        <h3><?= $studentCurrentSubjectCount === null ? '&mdash;' : number_format($studentCurrentSubjectCount) ?></h3>
+                                        <p>Current Subjects</p>
+                                    </div>
+                                    <div class="icon"><i class="fas fa-book-open" aria-hidden="true"></i></div>
+                                    <a href="student.php?view=load" class="small-box-footer">View Study Load <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                                </div>
+                            </div>
+                            <div class="col-lg-4 col-md-6">
+                                <div class="small-box bg-success">
+                                    <div class="inner">
+                                        <h3><?= $studentPostedGradeCount === null ? '&mdash;' : number_format($studentPostedGradeCount) ?></h3>
+                                        <p>Grades Posted</p>
+                                    </div>
+                                    <div class="icon"><i class="fas fa-star" aria-hidden="true"></i></div>
+                                    <a href="student.php?view=grades" class="small-box-footer">View Grades <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                                </div>
+                            </div>
+                            <div class="col-lg-4 col-md-6">
+                                <div class="small-box bg-warning">
+                                    <div class="inner">
+                                        <h3><?= $studentPendingGradeCount === null ? '&mdash;' : number_format($studentPendingGradeCount) ?></h3>
+                                        <p>Grades Pending</p>
+                                    </div>
+                                    <div class="icon"><i class="fas fa-hourglass-half" aria-hidden="true"></i></div>
+                                    <a href="student.php?view=grades" class="small-box-footer">Check Grades <i class="fas fa-arrow-circle-right" aria-hidden="true"></i></a>
+                                </div>
+                            </div>
+                        </div>
+                        <?php if ($studentLoad === false || $studentGradeResult === false): ?>
+                            <div class="alert alert-warning" role="alert">Some dashboard information could not be loaded. Please try again later.</div>
+                        <?php endif; ?>
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="card card-outline card-success">
+                                    <div class="card-header"><h2 class="card-title">Academic Placement</h2></div>
+                                    <div class="card-body">
+                                        <dl class="row mb-0">
+                                            <dt class="col-sm-4">Program</dt>
+                                            <dd class="col-sm-8"><?= htmlspecialchars((string) ($student['Course'] ?? 'Not specified'), ENT_QUOTES, 'UTF-8') ?></dd>
+                                            <dt class="col-sm-4">Year Level</dt>
+                                            <dd class="col-sm-8"><?= htmlspecialchars($studentYearLevel, ENT_QUOTES, 'UTF-8') ?></dd>
+                                            <dt class="col-sm-4">Section</dt>
+                                            <dd class="col-sm-8"><?= htmlspecialchars((string) ($student['Section_Name'] ?? 'Not assigned'), ENT_QUOTES, 'UTF-8') ?></dd>
+                                            <dt class="col-sm-4">Semester</dt>
+                                            <dd class="col-sm-8"><?= htmlspecialchars($semesterSummary !== '' ? $semesterSummary : 'Not specified', ENT_QUOTES, 'UTF-8') ?></dd>
+                                        </dl>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <div class="card card-outline card-primary">
+                                    <div class="card-header"><h2 class="card-title">Student Services</h2></div>
+                                    <div class="list-group list-group-flush">
+                                        <a href="student.php?view=load" class="list-group-item list-group-item-action"><i class="fas fa-book-open text-primary mr-2" aria-hidden="true"></i>View Study Load</a>
+                                        <a href="student.php?view=grades" class="list-group-item list-group-item-action"><i class="fas fa-star text-primary mr-2" aria-hidden="true"></i>View Grades</a>
+                                        <a href="student.php?view=profile" class="list-group-item list-group-item-action"><i class="fas fa-id-card text-primary mr-2" aria-hidden="true"></i>Personal Information</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php elseif ($studentView === 'profile'): ?>
                         <div class="card card-outline card-success">
                             <div class="card-header">
                                 <h2 class="card-title">Student Record</h2>
@@ -598,9 +769,12 @@ if (($_GET['status'] ?? '') === 'success') {
                             </div>
                         </div>
                     <?php elseif ($studentView === 'load'): ?>
-                        <div class="card card-outline card-success">
+                        <div class="card card-outline card-success" id="studentLoadPrintArea">
                             <div class="card-header d-flex align-items-center justify-content-between flex-wrap">
                                 <h2 class="card-title">Current Subjects</h2>
+                                <button type="button" class="btn btn-primary btn-sm ml-auto student-load-print-button" id="studentLoadPrint">
+                                    <i class="fas fa-print mr-1" aria-hidden="true"></i>Print
+                                </button>
                             </div>
                             <div class="card-body p-0">
                                 <div class="p-3 border-bottom">
@@ -748,10 +922,18 @@ if (($_GET['status'] ?? '') === 'success') {
                                                 <?php foreach ($studentGradeRows as $gradeRow): ?>
                                                     <tr>
                                                         <td><?= htmlspecialchars((string) ($gradeRow['SubjectName'] ?? '')) ?></td>
-                                                        <td class="grade-value"><?= htmlspecialchars(number_format((float) $gradeRow['grade'], 2)) ?></td>
+                                                        <td class="grade-value"><?= $gradeRow['grade'] !== null ? htmlspecialchars(number_format((float) $gradeRow['grade'], 2)) : '' ?></td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
+                                            <?php if ($studentGradeAverage !== null): ?>
+                                                <tfoot>
+                                                    <tr>
+                                                        <th scope="row">Average Grade</th>
+                                                        <td class="grade-value"><?= htmlspecialchars(number_format($studentGradeAverage, 2)) ?></td>
+                                                    </tr>
+                                                </tfoot>
+                                            <?php endif; ?>
                                         </table>
                                     </div>
                                 <?php endif; ?>
@@ -769,11 +951,27 @@ if (($_GET['status'] ?? '') === 'success') {
     <script src="adminlte/plugins/bootstrap/js/bootstrap.bundle.min.js"></script>
     <script src="adminlte/dist/js/adminlte.min.js"></script>
     <script>
+        const studentLoadPrintButton = document.getElementById('studentLoadPrint');
+        if (studentLoadPrintButton) {
+            studentLoadPrintButton.addEventListener('click', function () {
+                window.print();
+            });
+        }
+
         function toggleStudentSettings(event) {
             event.preventDefault();
             const menu = document.getElementById('studentSettingsMenu');
-            const isOpening = menu.style.display === 'none';
-            menu.style.display = isOpening ? 'block' : 'none';
+            const isOpening = event.currentTarget.getAttribute('aria-expanded') !== 'true';
+            const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220;
+            const submenu = $(menu).stop(true, false);
+
+            if (isOpening) {
+                submenu.slideDown(duration);
+            } else {
+                submenu.slideUp(duration);
+            }
+
+            event.currentTarget.closest('.nav-item').classList.toggle('menu-open', isOpening);
             event.currentTarget.setAttribute('aria-expanded', isOpening ? 'true' : 'false');
         }
 

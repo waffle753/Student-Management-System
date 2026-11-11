@@ -36,16 +36,26 @@ if ($programs) {
 }
 
 $knownPages = [
-    'teacher', 'teacher_students', 'teacher_classes', 'teacher_grades', 'user_manual', 'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
+    'teacher', 'teacher_students', 'teacher_classes', 'teacher_grades', 'registrar_dashboard', 'admin_dashboard', 'user_manual', 'students', 'user', 'instructor', 'programs', 'department', 'section', 'role',
     'schoolyear', 'semester', 'subject', 'curriculum_subject', 'class_schedule', 'registrar_student_records',
 ];
 $isTeacherRole = strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'teacher';
-$isRegistrarRole = strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) === 'registrar';
-$requestedPage = $_GET['page'] ?? ($isTeacherRole ? 'teacher' : 'students');
+$roleName = strtolower(trim((string) ($_SESSION['role_name'] ?? '')));
+$isRegistrarRole = $roleName === 'registrar';
+$isAdministratorRole = strpos($roleName, 'admin') !== false;
+$canViewStudentRecords = $isRegistrarRole || $isAdministratorRole;
+$requestedPage = $_GET['page'] ?? ($isTeacherRole ? 'teacher' : ($isRegistrarRole ? 'registrar_dashboard' : ($isAdministratorRole ? 'admin_dashboard' : 'students')));
 $page = is_string($requestedPage) && in_array($requestedPage, $knownPages, true)
     ? $requestedPage
-    : ($isTeacherRole ? 'teacher' : 'students');
-if (!isset($_GET['page']) && !$isTeacherRole && !hasRolePermission('students')) {
+    : ($isTeacherRole ? 'teacher' : ($isRegistrarRole ? 'registrar_dashboard' : ($isAdministratorRole ? 'admin_dashboard' : 'students')));
+if (in_array($page, ['registrar_dashboard', 'admin_dashboard'], true)) {
+    $hasDashboardRole = ($page === 'registrar_dashboard' && $isRegistrarRole)
+        || ($page === 'admin_dashboard' && $isAdministratorRole);
+    if (!$hasDashboardRole) {
+        http_response_code(403);
+        exit('You do not have permission to access this area.');
+    }
+} elseif (!isset($_GET['page']) && !$isTeacherRole && !$isRegistrarRole && !$isAdministratorRole && !hasRolePermission('students')) {
     $availablePages = [
         'user' => 'users',
         'instructor' => 'instructors',
@@ -67,13 +77,27 @@ if (!isset($_GET['page']) && !$isTeacherRole && !hasRolePermission('students')) 
     }
 }
 if ($page === 'registrar_student_records') {
-    if (!$isRegistrarRole) {
+    if (!$canViewStudentRecords) {
         http_response_code(403);
         exit('You do not have permission to access this area.');
     }
     requireRolePermission('students');
-} elseif ($page !== 'user_manual') {
+} elseif (!in_array($page, ['user_manual', 'registrar_dashboard', 'admin_dashboard'], true)) {
     requireRolePermission($page);
+}
+$registrarDashboardStats = null;
+if (in_array($page, ['registrar_dashboard', 'admin_dashboard'], true)) {
+    $dashboardResult = $conn->query(
+        "SELECT
+            (SELECT COUNT(*) FROM information WHERE Active = 0) AS student_count,
+            (SELECT COUNT(*) FROM program) AS program_count,
+            (SELECT COUNT(*) FROM sections) AS section_count,
+            (SELECT COUNT(*) FROM class_schedules) AS schedule_count"
+    );
+    if (!$dashboardResult) {
+        die('Unable to load Registrar dashboard statistics.');
+    }
+    $registrarDashboardStats = $dashboardResult->fetch_assoc();
 }
 $semesterOptions = [];
 $sectionOptions = [];
@@ -602,7 +626,7 @@ $result = $student->getAllStudents();
         white-space: nowrap;
     }
 
-    #studentTable .student-actions-cell.registrar-actions-cell {
+    #studentTable .student-actions-cell.student-record-actions-cell {
         width: 380px;
     }
 
@@ -853,11 +877,21 @@ $result = $student->getAllStudents();
 
                         <?php endif; ?>
 
+                        <?php if ($isRegistrarRole || $isAdministratorRole): ?>
+                        <li class="nav-item">
+                            <?php $dashboardPage = $isAdministratorRole ? 'admin_dashboard' : 'registrar_dashboard'; ?>
+                            <a href="index.php?page=<?= htmlspecialchars($dashboardPage, ENT_QUOTES, 'UTF-8') ?>" class="nav-link <?= in_array($page, ['registrar_dashboard', 'admin_dashboard'], true) ? 'active' : '' ?>" <?= in_array($page, ['registrar_dashboard', 'admin_dashboard'], true) ? 'aria-current="page"' : '' ?>>
+                                <i class="nav-icon fas fa-tachometer-alt" aria-hidden="true"></i>
+                                <p>Dashboard</p>
+                            </a>
+                        </li>
+                        <?php endif; ?>
+
                         <?php if (hasRolePermission('students') && strtolower(trim((string) ($_SESSION['role_name'] ?? ''))) !== 'teacher'): ?>
 
                         <li class="nav-item">
 
-                            <a href="index.php" class="nav-link <?= $page === 'students' ? 'active' : '' ?>">
+                            <a href="index.php?page=students" class="nav-link <?= $page === 'students' ? 'active' : '' ?>">
 
                                 <i class="nav-icon fas fa-user-graduate"></i>
 
@@ -1080,6 +1114,10 @@ $result = $student->getAllStudents();
             <?php elseif ($page === 'registrar_student_records'): ?>
 
                 <?php include "view/registrar_student_records.php"; ?>
+
+            <?php elseif (in_array($page, ['registrar_dashboard', 'admin_dashboard'], true)): ?>
+
+                <?php include "view/registrar_dashboard.php"; ?>
 
             <?php elseif ($page === 'user_manual'): ?>
 
@@ -1540,6 +1578,75 @@ $result = $student->getAllStudents();
 
                             <div class="card-body">
 
+                                <?php if ($isRegistrarRole): ?>
+                                    <section class="border rounded p-3 mb-3" aria-labelledby="registrarStudentFiltersHeading">
+                                        <h4 id="registrarStudentFiltersHeading" class="h6 mb-3">Filter Student Records</h4>
+                                        <div class="row">
+                                            <div class="col-lg-3 col-md-6">
+                                                <div class="form-group">
+                                                    <label for="registrarFilterDepartment">Department</label>
+                                                    <select id="registrarFilterDepartment" class="form-control registrar-student-filter">
+                                                        <option value="">All Departments</option>
+                                                        <?php foreach ($departmentOptions as $departmentOption): ?>
+                                                            <option value="<?= htmlspecialchars((string) $departmentOption['department_name'], ENT_QUOTES, 'UTF-8') ?>">
+                                                                <?= htmlspecialchars((string) $departmentOption['department_name'], ENT_QUOTES, 'UTF-8') ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 col-md-6">
+                                                <div class="form-group">
+                                                    <label for="registrarFilterProgram">Program / Course</label>
+                                                    <select id="registrarFilterProgram" class="form-control registrar-student-filter">
+                                                        <option value="">All Programs</option>
+                                                        <?php foreach ($courseOptions as $courseOption): ?>
+                                                            <option value="<?= htmlspecialchars((string) $courseOption['name'], ENT_QUOTES, 'UTF-8') ?>">
+                                                                <?= htmlspecialchars((string) $courseOption['code'] . ' - ' . (string) $courseOption['name'], ENT_QUOTES, 'UTF-8') ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 col-md-6">
+                                                <div class="form-group">
+                                                    <label for="registrarFilterYearLevel">Year Level</label>
+                                                    <select id="registrarFilterYearLevel" class="form-control registrar-student-filter">
+                                                        <option value="">All Year Levels</option>
+                                                        <?php foreach (['1' => '1st Year', '2' => '2nd Year', '3' => '3rd Year', '4' => '4th Year', '5' => '5th Year'] as $yearValue => $yearLabel): ?>
+                                                            <option value="<?= htmlspecialchars($yearValue, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($yearLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-3 col-md-6">
+                                                <div class="form-group">
+                                                    <label for="registrarFilterSection">Section</label>
+                                                    <select id="registrarFilterSection" class="form-control registrar-student-filter">
+                                                        <option value="">All Sections</option>
+                                                        <?php foreach ($sectionOptions as $sectionOption): ?>
+                                                            <option value="<?= (int) $sectionOption['section_id'] ?>">
+                                                                <?= htmlspecialchars((string) $sectionOption['section_name'] . ' - ' . (string) $sectionOption['CourseCode'] . ' - Year ' . (string) $sectionOption['year_level'], ENT_QUOTES, 'UTF-8') ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="col-12">
+                                                <button type="button" class="btn btn-primary btn-sm" id="applyRegistrarStudentFilters">
+                                                    <i class="fas fa-filter mr-1" aria-hidden="true"></i>Filter
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" id="resetRegistrarStudentFilters">
+                                                    Reset
+                                                </button>
+                                                <button type="button" class="btn btn-success btn-sm" id="exportRegistrarStudentsCsv">
+                                                    <i class="fas fa-file-csv mr-1" aria-hidden="true"></i>Export CSV
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </section>
+                                <?php endif; ?>
+
                                 <div class="table-responsive student-table-wrapper">
 
                                     <table id="studentTable" class="table modern-data-table">
@@ -1627,7 +1734,12 @@ $result = $student->getAllStudents();
 
                                                 ?>
 
-                                                <tr>
+                                                <tr
+                                                    data-department="<?= htmlspecialchars((string) ($row['Department'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-program="<?= htmlspecialchars((string) ($row['Course'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-year-level="<?= htmlspecialchars((string) ($row['Year_Level'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-section-id="<?= (int) ($row['Section_ID'] ?? 0) ?>"
+                                                    data-section-name="<?= htmlspecialchars((string) ($row['Section_Name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
 
                                                     <td>
                                                         <?= htmlspecialchars((string) ($row['ID'] ?? '')); ?>
@@ -1736,7 +1848,7 @@ $result = $student->getAllStudents();
                                                         <?= htmlspecialchars($emergencyAddress !== '' ? $emergencyAddress : ''); ?>
                                                     </td>
 
-                                                    <td class="text-center student-actions-cell <?= $isRegistrarRole ? 'registrar-actions-cell' : ''; ?>">
+                                                    <td class="text-center student-actions-cell <?= $canViewStudentRecords ? 'student-record-actions-cell' : ''; ?>">
 
                                                         <div class="d-flex justify-content-center align-items-center">
 
@@ -1791,7 +1903,7 @@ $result = $student->getAllStudents();
                                                             </button>
 
 
-                                                            <?php if ($isRegistrarRole): ?>
+                                                            <?php if ($canViewStudentRecords): ?>
                                                                 <button type="button" data-record="subjects" data-student-id="<?= (int) $row['ID']; ?>"
                                                                     class="btn btn-success btn-sm action-btn mr-1 registrarRecordBtn"
                                                                     aria-label="View enrolled subjects for <?= htmlspecialchars((string) $row['Student_Number'], ENT_QUOTES, 'UTF-8'); ?>">
@@ -1855,7 +1967,7 @@ $result = $student->getAllStudents();
 
     </div>
 
-    <?php if ($isRegistrarRole): ?>
+    <?php if ($canViewStudentRecords): ?>
     <div class="modal fade" id="registrarRecordModal" tabindex="-1" role="dialog" aria-labelledby="registrarRecordModalTitle" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
             <div class="modal-content">
@@ -2378,6 +2490,26 @@ $result = $student->getAllStudents();
                     .show();
             });
 
+            const registrarStudentFilters = document.getElementById('registrarFilterDepartment');
+            if (registrarStudentFilters) {
+                $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'studentTable') {
+                        return true;
+                    }
+
+                    const row = settings.aoData[dataIndex].nTr;
+                    const department = document.getElementById('registrarFilterDepartment').value;
+                    const program = document.getElementById('registrarFilterProgram').value;
+                    const yearLevel = document.getElementById('registrarFilterYearLevel').value;
+                    const sectionId = document.getElementById('registrarFilterSection').value;
+
+                    return (!department || row.dataset.department === department) &&
+                        (!program || row.dataset.program === program) &&
+                        (!yearLevel || row.dataset.yearLevel === yearLevel) &&
+                        (!sectionId || row.dataset.sectionId === sectionId);
+                });
+            }
+
             // Initialize DataTable
 
             var table = $('#studentTable').DataTable({
@@ -2396,8 +2528,58 @@ $result = $student->getAllStudents();
 
                 lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
 
-                dom: '<"top"l>t<"bottom"ip>'
+                dom: '<"top"lf>t<"bottom"ip>'
 
+            });
+
+            $('#applyRegistrarStudentFilters').on('click', function () {
+                table.draw();
+            });
+
+            $('#resetRegistrarStudentFilters').on('click', function () {
+                $('.registrar-student-filter').val('');
+                table.draw();
+            });
+
+            $('#exportRegistrarStudentsCsv').on('click', function () {
+                const headers = [
+                    'Student ID', 'Student Number', 'First Name', 'Middle Name', 'Last Name',
+                    'Program / Course', 'School Year', 'Year Level', 'Department', 'Section'
+                ];
+                const csvEscape = function (value) {
+                    let text = String(value ?? '').replace(/\s+/g, ' ').trim();
+                    if (/^[=+\-@\t\r]/.test(text)) {
+                        text = "'" + text;
+                    }
+                    return '"' + text.replace(/"/g, '""') + '"';
+                };
+                const rows = table.rows({ search: 'applied' }).nodes().toArray().map(function (row) {
+                    return [
+                        row.cells[0]?.textContent,
+                        row.cells[1]?.textContent,
+                        row.cells[2]?.textContent,
+                        row.cells[3]?.textContent,
+                        row.cells[4]?.textContent,
+                        row.dataset.program,
+                        row.cells[6]?.textContent,
+                        row.dataset.yearLevel,
+                        row.dataset.department,
+                        row.dataset.sectionName
+                    ];
+                });
+                const csvContent = '\uFEFF' + [headers, ...rows]
+                    .map(function (row) {
+                        return row.map(csvEscape).join(',');
+                    })
+                    .join('\r\n');
+                const downloadUrl = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+                const downloadLink = document.createElement('a');
+                downloadLink.href = downloadUrl;
+                downloadLink.download = 'student-records-' + new Date().toISOString().slice(0, 10) + '.csv';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                downloadLink.remove();
+                URL.revokeObjectURL(downloadUrl);
             });
 
 
@@ -2608,6 +2790,47 @@ $result = $student->getAllStudents();
                 const age = calculateStudentAge(dateOfBirth);
                 $('#view_age').val(age === null ? '' : age);
 
+            });
+
+            $(document).on('click', '.registrar-record-print-button', function () {
+                window.print();
+            });
+
+            $(document).on('submit', '#adminStudentGradesForm', function (event) {
+                event.preventDefault();
+                const form = this;
+                const submitButton = $(form).find('button[type="submit"]');
+                submitButton.prop('disabled', true);
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: new FormData(form),
+                    headers: { 'Accept': 'application/json' }
+                })
+                    .then((response) => response.json().then((result) => {
+                        if (!response.ok) {
+                            throw new Error(result.error || 'Unable to update these grades.');
+                        }
+                        return result;
+                    }))
+                    .then(() => {
+                        const studentId = form.elements.student_id.value;
+                        const recordUrl = `index.php?page=registrar_student_records&popup=1&record=grades&student_id=${encodeURIComponent(studentId)}`;
+                        return fetch(recordUrl).then((response) => response.text().then((html) => {
+                            if (!response.ok) {
+                                throw new Error(html || 'Grades were saved but could not be reloaded.');
+                            }
+                            return html;
+                        }));
+                    })
+                    .then((html) => {
+                        $('#registrarRecordModalBody').html(html);
+                        $('#registrarRecordModalBody').prepend('<div class="alert alert-success mb-3">Grades updated successfully.</div>');
+                    })
+                    .catch((error) => {
+                        $(form).prepend(`<div class="alert alert-danger">${escapeHtml(error.message || 'Unable to update these grades.')}</div>`);
+                        submitButton.prop('disabled', false);
+                    });
             });
 
             $('.registrarRecordBtn').click(function () {
@@ -3528,8 +3751,17 @@ $result = $student->getAllStudents();
         function toggleSettings(event) {
             event.preventDefault();
             const menu = document.getElementById("settingsMenu");
-            const isOpening = menu.style.display === "none";
-            menu.style.display = isOpening ? "block" : "none";
+            const isOpening = event.currentTarget.getAttribute("aria-expanded") !== "true";
+            const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220;
+            const submenu = $(menu).stop(true, false);
+
+            if (isOpening) {
+                submenu.slideDown(duration);
+            } else {
+                submenu.slideUp(duration);
+            }
+
+            event.currentTarget.closest(".nav-item").classList.toggle("menu-open", isOpening);
             event.currentTarget.setAttribute("aria-expanded", isOpening ? "true" : "false");
         }
 
